@@ -4,12 +4,11 @@ import os
 import re
 import tempfile
 from matplotlib import font_manager
-from matplotlib.patches import Ellipse, PathPatch
-from matplotlib.path import Path
 import matplotlib.pyplot as plt
 from music21 import chord, converter, interval, key, midi, note, pitch, roman, stream
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 st.set_page_config(
     page_title="악곡분석 콘솔 v3.0",
@@ -228,7 +227,7 @@ def format_traditional_roman(ch, rn, global_key):
 
 
 # ==========================================
-# 3. 조성별 7음계 다이아토닉 3화음 오선 악보 및 장·단조 기능 박스
+# 3. 조성별 7음계 다이아토닉 3화음 SVG 오선 악보 및 장·단조 기능 대조표
 # ==========================================
 def parse_key_safe(key_label):
   try:
@@ -261,54 +260,50 @@ def get_scale_7_pitches(k_obj, is_major):
   return [tonic_p.transpose(s) for s in steps]
 
 
-def draw_treble_clef(ax, cx=0.68, cy=70.0):
-  """자연스러운 곡선의 높은음자리표(G clef)를 그립니다."""
-  # G선(y=67) 주변 고리 + 부드러운 상단 루프 + 하단 갈고리
-  verts = [
-      (cx - 0.02, cy - 3.0),
-      (cx + 0.16, cy - 3.0),
-      (cx + 0.18, cy - 0.8),
-      (cx - 0.14, cy - 0.5),
-      (cx - 0.16, cy + 2.2),
-      (cx + 0.10, cy + 4.2),
-      (cx + 0.08, cy + 6.8),
-      (cx + 0.02, cy + 7.4),
-      (cx - 0.02, cy + 5.8),
-      (cx - 0.02, cy - 5.2),
-      (cx - 0.02, cy - 6.8),
-      (cx - 0.15, cy - 7.2),
-      (cx - 0.18, cy - 6.2),
-      (cx - 0.10, cy - 5.9),
-  ]
-  codes = [
-      Path.MOVETO,
-      Path.CURVE4,
-      Path.CURVE4,
-      Path.CURVE4,
-      Path.CURVE4,
-      Path.CURVE4,
-      Path.CURVE4,
-      Path.CURVE4,
-      Path.CURVE4,
-      Path.LINETO,
-      Path.CURVE4,
-      Path.CURVE4,
-      Path.CURVE4,
-      Path.CURVE4,
-  ]
-  patch = PathPatch(
-      Path(verts, codes),
-      facecolor="none",
-      edgecolor="#1f2937",
-      linewidth=1.9,
-      zorder=3,
-  )
-  ax.add_patch(patch)
-  ax.scatter([cx - 0.10], [cy - 6.3], s=22, color="#1f2937", zorder=3)
+def _diatonic_triad_pitches(tonic_str, is_major):
+  """조성에 맞춰 1도~7도 다이아토닉 3화음(근음, 3음, 5음)을 반환합니다."""
+  k_obj = parse_key_safe(f"{tonic_str} {'major' if is_major else 'minor'}")
+  scale_p = get_scale_7_pitches(k_obj, is_major)
+  triads = []
+  for idx in range(7):
+    p1 = scale_p[idx]
+    p3 = scale_p[(idx + 2) % 7]
+    p5 = scale_p[(idx + 4) % 7]
+    if p3.midi < p1.midi:
+      p3 = pitch.Pitch(p3.name)
+      p3.octave = p1.octave + 1
+    if p5.midi < p3.midi:
+      p5 = pitch.Pitch(p5.name)
+      p5.octave = p3.octave + 1
+    triads.append((p1, p3, p5))
+  return triads
+
+
+def _pitch_to_svg_y(p_obj, top_line_y=44.0, line_gap=11.0):
+  """높은음자리표 기준 음높이를 SVG y좌표로 변환합니다."""
+  c4_midi = 60
+  diff_semis = p_obj.midi - c4_midi
+  oct_shift, rem = divmod(diff_semis, 12)
+  approx_step = oct_shift * 7 + {
+      0: 0,
+      1: 0,
+      2: 1,
+      3: 2,
+      4: 2,
+      5: 3,
+      6: 3,
+      7: 4,
+      8: 4,
+      9: 5,
+      10: 6,
+      11: 6,
+  }.get(rem, 0)
+  step_from_e4 = approx_step - 2
+  return (top_line_y + 4 * line_gap) - step_from_e4 * (0.5 * line_gap)
 
 
 def draw_key_triads_staff(key_labels):
-  """각 조성(전조 포함)의 7개 음계음 위 3화음과 로마숫자·화성 기능(T/S/D)을 높은음자리표 오선 악보로 그립니다."""
+  """교재 <Ex. 31> 스타일의 SVG 높은음자리표 + 3도 3화음 악보를 렌더링합니다."""
   unique_keys = []
   for k in key_labels:
     if k and k not in unique_keys:
@@ -316,171 +311,153 @@ def draw_key_triads_staff(key_labels):
   if not unique_keys:
     unique_keys = ["C major"]
 
-  major_info = [
-      ("I", "T\n(Tonic)"),
-      ("ii", "S sub.\n(Supertonic)"),
-      ("iii", "T/D\n(Mediant)"),
-      ("IV", "S\n(Subdominant)"),
-      ("V", "D\n(Dominant)"),
-      ("vi", "T\n(Submediant)"),
-      ("vii°", "D\n(Leading-Tone)"),
-  ]
-  minor_info = [
-      ("i", "t\n(Tonic)"),
-      ("ii°", "S\n(Supertonic)"),
-      ("III+", "t/D\n(Mediant)"),
-      ("iv", "s\n(Subdominant)"),
-      ("V", "D\n(Dominant)"),
-      ("VI", "s\n(Submediant)"),
-      ("vii°", "D\n(Leading-Tone)"),
-  ]
+  major_degs = ["I", "ii", "iii", "IV", "V", "vi", "vii°"]
+  minor_degs = ["i", "ii°", "III+", "iv", "V", "VI", "vii°"]
 
-  fig, axes = plt.subplots(
-      len(unique_keys),
-      1,
-      figsize=(11.5, 4.5 * len(unique_keys)),
-      squeeze=False,
-  )
-  fig.patch.set_facecolor("#FFFFFF")
-
-  staff_x_start = 0.4
-  staff_x_end = 7.6
-  # 5선 간격을 모두 동일(3단위)하게 설정
-  staff_lines = [64, 67, 70, 73, 76]
-  ledger_above = [79, 82]
-  ledger_below = [61, 58]
-
-  for idx, k_label in enumerate(unique_keys):
-    ax = axes[idx][0]
-    ax.set_facecolor("#FFFDF9")
-    ax.set_aspect("auto")
-
+  blocks_html = []
+  for k_label in unique_keys:
     k_obj = parse_key_safe(k_label)
     is_major = k_obj.mode == "major"
-    scale_pitches = get_scale_7_pitches(k_obj, is_major)
+    tonic_name = k_obj.tonic.name.replace("-", "♭")
+    mode_kor = "장조" if is_major else "단조 (화성단음계)"
+    deg_list = major_degs if is_major else minor_degs
+    triads = _diatonic_triad_pitches(k_obj.tonic.name, is_major)
 
-    # 일정 간격 오선 5선 그리기
-    for sl in staff_lines:
-      ax.plot(
-          [staff_x_start, staff_x_end],
-          [sl, sl],
-          color="#333333",
-          linewidth=1.15,
-          alpha=0.9,
-          zorder=1,
+    width = 920
+    height = 175
+    top_y = 44.0
+    gap = 11.0
+    staff_left = 24
+    staff_right = 896
+    bot_y = top_y + 4 * gap
+
+    lines_svg = []
+    for i in range(5):
+      ly = top_y + i * gap
+      lines_svg.append(
+          f'<line x1="{staff_left}" y1="{ly}" x2="{staff_right}" y2="{ly}"'
+          ' stroke="#222" stroke-width="1.2"/>'
       )
 
-    # 높은음자리표 그리기
-    draw_treble_clef(ax, cx=0.68, cy=70.0)
-
-    degree_meta = major_info if is_major else minor_info
-    for deg_idx in range(7):
-      x_pos = 1.35 + deg_idx * 0.92
-      root_p = scale_pitches[deg_idx]
-      third_p = scale_pitches[(deg_idx + 2) % 7]
-      fifth_p = scale_pitches[(deg_idx + 4) % 7]
-
-      # 실제 화음의 음정 차이(반음 수)를 반영해 3도 쌓기 화음 모양 유지
-      iv_13 = max(3, min(4, interval.Interval(root_p, third_p).semitones))
-      iv_35 = max(3, min(4, interval.Interval(third_p, fifth_p).semitones))
-
-      # 오선(61~82) 범위 내에 맞춰 3화음 세 음의 y좌표 산출
-      step_y = 1.95
-      p1_y = 61.0 + deg_idx * 1.45
-      p2_y = p1_y + step_y * (iv_13 / 3.5)
-      p3_y = p2_y + step_y * (iv_35 / 3.5)
-
-      for note_y in (p1_y, p2_y, p3_y):
-        if note_y <= 61.5:
-          for lp in ledger_below:
-            if note_y <= lp + 1.1:
-              ax.plot(
-                  [x_pos - 0.26, x_pos + 0.26],
-                  [lp, lp],
-                  color="#333333",
-                  linewidth=1.15,
-                  zorder=1,
-              )
-        elif note_y >= 78.5:
-          for lp in ledger_above:
-            if note_y >= lp - 1.1:
-              ax.plot(
-                  [x_pos - 0.26, x_pos + 0.26],
-                  [lp, lp],
-                  color="#333333",
-                  linewidth=1.15,
-                  zorder=1,
-              )
-
-        # 음표 세 개가 서로 살짝 맞닿아 꽉 차게 보이도록 설정
-        ell = Ellipse(
-            (x_pos, note_y),
-            width=0.34,
-            height=2.25,
-            facecolor="none",
-            edgecolor="#1f2937",
-            linewidth=1.8,
-            zorder=3,
-        )
-        ax.add_patch(ell)
-
-      roman, func_label = degree_meta[deg_idx]
-      ax.text(
-          x_pos,
-          55.8,
-          roman,
-          fontsize=10.5,
-          fontweight="bold",
-          ha="center",
-          va="top",
-          color="#111827",
-      )
-      ax.text(
-          x_pos,
-          51.8,
-          func_label,
-          fontsize=8.3,
-          ha="center",
-          va="top",
-          color="#374151",
-      )
-
-    mode_en = "Major" if is_major else "Minor (Harmonic)"
-    ax.set_title(
-        f"{k_label}  —  {mode_en}  (7-Scale Diatonic Triads)",
-        fontsize=11,
-        fontweight="bold",
-        loc="left",
-        pad=10,
+    lines_svg.append(
+        f'<line x1="{staff_left}" y1="{top_y}" x2="{staff_left}" y2="{bot_y}"'
+        ' stroke="#222" stroke-width="1.3"/>'
     )
-    ax.set_xlim(0.1, 7.9)
-    ax.set_ylim(43.0, 85.0)
-    ax.axis("off")
+    lines_svg.append(
+        f'<line x1="{staff_right}" y1="{top_y}" x2="{staff_right}"'
+        f' y2="{bot_y}" stroke="#222" stroke-width="1.5"/>'
+    )
 
-  fig.subplots_adjust(hspace=0.35)
-  return fig
+    clef_svg = f"""
+        <g transform="translate(46, {top_y - 10}) scale(0.82)">
+            <path d="M26 78 C38 78, 45 68, 43 57 C41 47, 27 45, 22 53 C17 60, 22 69, 30 69
+                     C35 69, 38 65, 37 61 C36 58, 32 58, 31 60
+                     M31 78 L31 14 C31 6, 23 4, 20 11 C17 18, 24 28, 36 37
+                     C45 44, 46 56, 39 67 C33 75, 22 77, 15 71 C9 66, 10 56, 17 51"
+                  fill="none" stroke="#111" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="15" cy="73" r="3.2" fill="#111"/>
+        </g>
+        """
+
+    notes_svg = []
+    start_x = 135
+    step_x = 102
+
+    for idx_d, (p1, p3, p5) in enumerate(triads):
+      cx = start_x + idx_d * step_x
+      for p_item in (p1, p3, p5):
+        ny = _pitch_to_svg_y(p_item, top_line_y=top_y, line_gap=gap)
+
+        if ny >= bot_y + gap * 0.8:
+          cur_ly = bot_y + gap
+          while cur_ly <= ny + 1.5:
+            notes_svg.append(
+                f'<line x1="{cx - 15}" y1="{cur_ly}" x2="{cx + 15}"'
+                f' y2="{cur_ly}" stroke="#222" stroke-width="1.2"/>'
+            )
+            cur_ly += gap
+        elif ny <= top_y - gap * 0.8:
+          cur_ly = top_y - gap
+          while cur_ly >= ny - 1.5:
+            notes_svg.append(
+                f'<line x1="{cx - 15}" y1="{cur_ly}" x2="{cx + 15}"'
+                f' y2="{cur_ly}" stroke="#222" stroke-width="1.2"/>'
+            )
+            cur_ly -= gap
+
+        if "#" in p_item.name:
+          notes_svg.append(
+              f'<text x="{cx - 16}" y="{ny + 4}" font-size="13" font-weight="bold"'
+              f' fill="#111" text-anchor="end">♯</text>'
+          )
+        elif "-" in p_item.name:
+          notes_svg.append(
+              f'<text x="{cx - 16}" y="{ny + 4}" font-size="13" font-weight="bold"'
+              f' fill="#111" text-anchor="end">♭</text>'
+          )
+
+        notes_svg.append(
+            f'<ellipse cx="{cx}" cy="{ny}" rx="8.2" ry="5.3" fill="#fff"'
+            ' stroke="#111" stroke-width="2.0"/>'
+        )
+
+      notes_svg.append(
+          f'<text x="{cx}" y="{bot_y + 28}" font-size="13" font-weight="bold"'
+          ' fill="#111" text-anchor="middle"'
+          f' font-family="sans-serif">{deg_list[idx_d]}</text>'
+      )
+
+    svg_block = f"""
+        <div style="margin-bottom: 14px; background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px;">
+            <div style="font-weight:700; font-size:14px; color:#111827; margin-bottom:4px;">
+                {tonic_name} {mode_kor} ({k_label})
+            </div>
+            <svg viewBox="0 0 {width} {height}" width="100%" style="max-width:940px; height:auto; display:block;">
+                {''.join(lines_svg)}
+                {clef_svg}
+                {''.join(notes_svg)}
+            </svg>
+        </div>
+        """
+    blocks_html.append(svg_block)
+
+  components.html(
+      f"""
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif;">
+            {''.join(blocks_html)}
+        </div>
+        """,
+      height=min(620, 205 * len(unique_keys)),
+      scrolling=True,
+  )
+  return None
 
 
 def render_major_minor_function_box():
-  """장조와 단조의 도수별 화성 기능 및 명칭 비교 박스를 렌더링합니다."""
+  """교재의 장조/단조 도수 대응 및 화성 기능 대조표를 렌더링합니다."""
   st.markdown(
-      "#### 📘 장조 · 단조 화성 기능 비교표 (Tonic / Subdominant / Dominant)"
+      "#### 📘 장조 · 단조 화성 기능 대조표 (Tonic / Subdominant / Dominant)"
   )
   rows = [
-      ("1도", "I (T)", "i (t)", "Tonic (으뜸음)"),
-      ("2도", "ii (S 대리)", "ii° (S)", "Supertonic (윗으뜸음)"),
-      ("3도", "iii (T/D)", "III+ (t/D)", "Mediant (가온음)"),
-      ("4도", "IV (S)", "iv (s)", "Subdominant (버금딸림음)"),
-      ("5도", "V (D)", "V (D)", "Dominant (딸림음)"),
-      ("6도", "vi (T)", "VI (s)", "Submediant (버금가온음)"),
-      ("7도", "vii° (D)", "vii° (D)", "Leading-Tone (이끈음)"),
+      ("1도", "I", "T", "i", "t", "Tonic (으뜸음)"),
+      ("2도", "ii", "S / Sp", "ii°", "S", "Supertonic (윗으뜸음)"),
+      ("3도", "iii", "Tp / Dp", "III+", "tP / DP", "Mediant (가온음)"),
+      ("4도", "IV", "S", "iv", "s", "Subdominant (버금딸림음)"),
+      ("5도", "V", "D", "V", "D", "Dominant (딸림음)"),
+      ("6도", "vi", "Tp", "VI", "sP", "Submediant (버금가온음)"),
+      ("7도", "vii°", "D", "vii°", "D", "Leading-Tone (이끈음)"),
   ]
   table_lines = [
-      "| 도수 | 장조 (Major) | 단조 (Minor) | 화성 기능 및 명칭 |",
-      "| :---: | :---: | :---: | :--- |",
+      (
+          "| 도수 | 장조 도수 | 장조 기능 | 단조 도수 | 단조 기능 | 화성 기능"
+          " 명칭 |"
+      ),
+      "| :---: | :---: | :---: | :---: | :---: | :--- |",
   ]
-  for deg, maj, min_k, desc in rows:
-    table_lines.append(f"| {deg} | **{maj}** | **{min_k}** | {desc} |")
+  for deg, maj_r, maj_f, min_r, min_f, desc in rows:
+    table_lines.append(
+        f"| {deg} | **{maj_r}** | {maj_f} | **{min_r}** | {min_f} | {desc} |"
+    )
   st.markdown("\n".join(table_lines))
 
 
@@ -934,7 +911,7 @@ if score is not None or (isinstance(picked_data, dict) and picked_data):
       expanded=True,
   ):
     st.write(f"**표시 조성 목록 (전조 포함):** {', '.join(related_keys)}")
-    st.pyplot(draw_key_triads_staff(related_keys))
+    draw_key_triads_staff(related_keys)
     render_major_minor_function_box()
 
 if score is not None:
