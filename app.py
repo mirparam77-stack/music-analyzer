@@ -333,6 +333,7 @@ def _build_g_clef_svg(x_center=58.0, top_line_y=44.0, line_gap=11.0):
 
 
 def draw_key_triads_staff(key_labels):
+  """오선지 줄이 온음표에도 관통해 보이도록 그리는 SVG 다이아토닉 3화음 악보"""
   unique_keys = []
   for k in key_labels:
     if k and k not in unique_keys:
@@ -360,26 +361,10 @@ def draw_key_triads_staff(key_labels):
     staff_right = 896
     bot_y = top_y + 4 * gap
 
-    lines_svg = []
-    for i in range(5):
-      ly = top_y + i * gap
-      lines_svg.append(
-          f'<line x1="{staff_left}" y1="{ly}" x2="{staff_right}" y2="{ly}"'
-          ' stroke="#222" stroke-width="1.2"/>'
-      )
-
-    lines_svg.append(
-        f'<line x1="{staff_left}" y1="{top_y}" x2="{staff_left}" y2="{bot_y}"'
-        ' stroke="#222" stroke-width="1.3"/>'
-    )
-    lines_svg.append(
-        f'<line x1="{staff_right}" y1="{top_y}" x2="{staff_right}"'
-        f' y2="{bot_y}" stroke="#222" stroke-width="1.5"/>'
-    )
-
-    clef_svg = _build_g_clef_svg(x_center=58.0, top_line_y=top_y, line_gap=gap)
-
+    # 1) 음표 머리(온음표 타원): fill="none"으로 설정해 오선 줄이 온음표 위·아래로 관통해 보이게 함
     notes_svg = []
+    ledger_svg = []
+    labels_svg = []
     start_x = 135
     step_x = 102
 
@@ -388,44 +373,67 @@ def draw_key_triads_staff(key_labels):
       for p_item in (p1, p3, p5):
         ny = _pitch_to_svg_y(p_item, top_line_y=top_y, line_gap=gap)
 
+        # 덧줄
         if ny >= bot_y + gap * 0.8:
           cur_ly = bot_y + gap
           while cur_ly <= ny + 1.5:
-            notes_svg.append(
+            ledger_svg.append(
                 f'<line x1="{cx - 15}" y1="{cur_ly}" x2="{cx + 15}"'
-                f' y2="{cur_ly}" stroke="#222" stroke-width="1.2"/>'
+                f' y2="{cur_ly}" stroke="#222" stroke-width="1.3"/>'
             )
             cur_ly += gap
         elif ny <= top_y - gap * 0.8:
           cur_ly = top_y - gap
           while cur_ly >= ny - 1.5:
-            notes_svg.append(
+            ledger_svg.append(
                 f'<line x1="{cx - 15}" y1="{cur_ly}" x2="{cx + 15}"'
-                f' y2="{cur_ly}" stroke="#222" stroke-width="1.2"/>'
+                f' y2="{cur_ly}" stroke="#222" stroke-width="1.3"/>'
             )
             cur_ly -= gap
 
+        # 임시표
         if "#" in p_item.name:
-          notes_svg.append(
+          labels_svg.append(
               f'<text x="{cx - 15}" y="{ny + 4}" font-size="13" font-weight="bold"'
               f' fill="#111" text-anchor="end">♯</text>'
           )
         elif "-" in p_item.name:
-          notes_svg.append(
+          labels_svg.append(
               f'<text x="{cx - 15}" y="{ny + 4}" font-size="13" font-weight="bold"'
               f' fill="#111" text-anchor="end">♭</text>'
           )
 
+        # 온음표 테두리만 그려 오선 줄이 그대로 보이게 처리
         notes_svg.append(
-            f'<ellipse cx="{cx}" cy="{ny}" rx="8.0" ry="5.1" fill="#fff"'
+            f'<ellipse cx="{cx}" cy="{ny}" rx="8.0" ry="5.1" fill="none"'
             ' stroke="#111" stroke-width="2.0"/>'
         )
 
-      notes_svg.append(
+      labels_svg.append(
           f'<text x="{cx}" y="{bot_y + 28}" font-size="13" font-weight="bold"'
           ' fill="#111" text-anchor="middle"'
           f' font-family="sans-serif">{deg_list[idx_d]}</text>'
       )
+
+    # 2) 오선지 5선 + 세로줄 + 높은음자리표 (맨 위에 배치해 온음표 위에서도 오선 줄이 선명히 보임)
+    staff_svg = []
+    for i in range(5):
+      ly = top_y + i * gap
+      staff_svg.append(
+          f'<line x1="{staff_left}" y1="{ly}" x2="{staff_right}" y2="{ly}"'
+          ' stroke="#222" stroke-width="1.25"/>'
+      )
+
+    staff_svg.append(
+        f'<line x1="{staff_left}" y1="{top_y}" x2="{staff_left}" y2="{bot_y}"'
+        ' stroke="#222" stroke-width="1.3"/>'
+    )
+    staff_svg.append(
+        f'<line x1="{staff_right}" y1="{top_y}" x2="{staff_right}"'
+        f' y2="{bot_y}" stroke="#222" stroke-width="1.5"/>'
+    )
+
+    clef_svg = _build_g_clef_svg(x_center=58.0, top_line_y=top_y, line_gap=gap)
 
     svg_block = f"""
         <div style="margin-bottom: 14px; background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px;">
@@ -433,9 +441,11 @@ def draw_key_triads_staff(key_labels):
                 {tonic_name} {mode_kor} ({k_label})
             </div>
             <svg viewBox="0 0 {width} {height}" width="100%" style="max-width:940px; height:auto; display:block;">
-                {''.join(lines_svg)}
-                {clef_svg}
                 {''.join(notes_svg)}
+                {''.join(staff_svg)}
+                {''.join(ledger_svg)}
+                {clef_svg}
+                {''.join(labels_svg)}
             </svg>
         </div>
         """
@@ -939,59 +949,4 @@ if score is not None:
 
   with t1:
     st.subheader("1. 프레이즈 구간 컬러 흐름")
-    if st.session_state[phrase_state_key]:
-      st.pyplot(
-          draw_phrase_timeline_chart(
-              st.session_state[phrase_state_key], total_m, cmap
-          )
-      )
-
-    st.subheader("2. 수직 화성 및 로마숫자 기능 표")
-    st.dataframe(df_v, use_container_width=True, height=320)
-
-    st.subheader("3. 프레이징 구분 근거")
-    for p in st.session_state[phrase_state_key]:
-      st.markdown(
-          f"""
-          <div class="phrase-box">
-              <strong>{p.get('이름', '프레이즈')}</strong> (m.{p.get('시작', '?')} ~ m.{p.get('끝', '?')})<br>
-              <span>근거: {p.get('근거', '')}</span>
-          </div>
-          """,
-          unsafe_allow_html=True,
-      )
-
-  with t2:
-    st.subheader("수직 화성 및 로마숫자 상세 표")
-    st.dataframe(df_v, use_container_width=True)
-    if not df_v.empty:
-      st.download_button(
-          "📥 수직 화성 CSV 다운로드",
-          data=df_v.to_csv(index=False).encode("utf-8-sig"),
-          file_name=f"{source_title}_vertical_v3.csv",
-          mime="text/csv",
-      )
-
-  with t3:
-    st.subheader("MIDI 전체 및 프레이즈 구간 재생")
-    st.audio(make_midi_audio(score), format="audio/midi")
-    for p in st.session_state[phrase_state_key]:
-      if p["시작"] <= p["끝"] and total_m > 0:
-        st.caption(f"{p['이름']} ({p['시작']}~{p['끝']}마디)")
-        st.audio(
-            make_midi_audio(score, p["시작"], p["끝"]), format="audio/midi"
-        )
-elif isinstance(picked_data, dict) and picked_data:
-  phrases_saved = st.session_state.get(phrase_state_key, [])
-  if phrases_saved:
-    st.subheader("프레이징 구분 근거")
-    for p in phrases_saved:
-      st.markdown(
-          f"""
-          <div class="phrase-box">
-              <strong>{p.get('이름', '프레이즈')}</strong> (m.{p.get('시작', '?')} ~ m.{p.get('끝', '?')})<br>
-              <span>근거: {p.get('근거', '')}</span>
-          </div>
-          """,
-          unsafe_allow_html=True,
-      )
+    if st.session_state[phrase_state
