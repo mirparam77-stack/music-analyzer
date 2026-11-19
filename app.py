@@ -697,10 +697,9 @@ with st.sidebar:
           st.success(f"'{picked_song}' 삭제 완료")
           st.rerun()
     with col_del2:
-      show_raw_json = st.toggle("원본 JSON 보기", value=False)
-
-    picked_data = db[picked_song]
-    if isinstance(picked_data, dict):
+     st.write("")
+  picked_data = db[picked_song]
+  if isinstance(picked_data, dict):
       st.write(f"**항목 키:** `{picked_song}`")
       if "title" in picked_data:
         st.write(f"**곡명:** {picked_data.get('title')}")
@@ -710,12 +709,9 @@ with st.sidebar:
         st.write(f"**시대:** {picked_data.get('era')}")
       if "total_measures" in picked_data:
         st.write(f"**마디 수:** {picked_data.get('total_measures')}")
-    elif isinstance(picked_data, list):
-      st.write(f"**보관 건수:** {len(picked_data)}건")
+      elif isinstance(picked_data, list):
+        st.write(f"**보관 건수:** {len(picked_data)}건")
 
-    if show_raw_json:
-      with st.expander("상세 데이터 펼치기", expanded=True):
-        st.json(picked_data)
   else:
     st.caption("보관된 곡이 없습니다.")
 
