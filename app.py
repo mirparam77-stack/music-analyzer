@@ -490,82 +490,8 @@ def check_and_fix_measures(score, expected_measures=0, manual_offset=0):
 
 
 # ==========================================
-# 5. 다성부 분리 및 수평(대위법) / 수직(화성) 분석
+# 5. 수직(화성) 및 전조 분석
 # ==========================================
-def separate_voices(score):
-  if len(score.parts) > 1:
-    return list(score.parts)
-  if score.parts:
-    voices = score.parts[0].flatten().getElementsByClass(stream.Voice)
-    if len(voices) > 1:
-      return list(score.voicesToParts().parts)
-  return list(score.parts)
-
-
-def analyze_horizontal(score):
-  rows = []
-  parts = separate_voices(score)
-  n_parts = len(parts)
-
-  for idx, part in enumerate(parts):
-    if part.partName:
-      v_name = part.partName
-    elif n_parts == 1:
-      v_name = "통합 성부 (Voice 1)"
-    elif idx == 0:
-      v_name = "상성부 (Soprano)"
-    elif idx == n_parts - 1:
-      v_name = "저성부 (Bass)"
-    else:
-      v_name = f"내성부 (Inner {idx})"
-
-    els = [
-        e
-        for e in part.flatten().notes
-        if isinstance(e, (note.Note, chord.Chord))
-    ]
-    for i in range(len(els) - 1):
-      c_el, n_el = els[i], els[i + 1]
-      c_note = (
-          c_el
-          if c_el.isNote
-          else (
-              c_el.sortAscending()[0]
-              if idx == n_parts - 1 and n_parts > 1
-              else c_el.sortAscending()[-1]
-          )
-      )
-      n_note = (
-          n_el
-          if n_el.isNote
-          else (
-              n_el.sortAscending()[0]
-              if idx == n_parts - 1 and n_parts > 1
-              else n_el.sortAscending()[-1]
-          )
-      )
-
-      iv = interval.Interval(c_note, n_note)
-      semi = abs(iv.semitones)
-      if semi == 0:
-        m_type = "동음 유지 (Static)"
-      elif semi <= 2:
-        m_type = "순차 진행 (Step)"
-      else:
-        m_type = "도약 진행 (Leap)"
-
-      rows.append({
-          "마디": c_el.measureNumber or 1,
-          "성부": v_name,
-          "현재음": c_note.nameWithOctave,
-          "다음음": n_note.nameWithOctave,
-          "음정": iv.directedName,
-          "진행": m_type,
-          "MIDI": c_note.pitch.midi,
-      })
-  return pd.DataFrame(rows)
-
-
 def analyze_vertical_and_modulations(score, global_key):
   rows = []
   modulations = []
@@ -607,7 +533,6 @@ def analyze_vertical_and_modulations(score, global_key):
         })
 
   return pd.DataFrame(rows), modulations, detected_keys
-
 
 # ==========================================
 # 6. 프레이징 근거 추출 및 컬러 매핑 시각화
