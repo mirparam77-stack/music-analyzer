@@ -223,7 +223,7 @@ def format_traditional_roman(ch, rn, global_key):
 
 
 # ==========================================
-# 3. music21 기반 7음계 3화음 계산 + G선 기준 SVG 오선 악보
+# 3. music21 RomanNumeral 기반 조성별 3화음 + G선 SVG 오선 악보
 # ==========================================
 def parse_key_safe(key_label):
     try:
@@ -237,45 +237,20 @@ def parse_key_safe(key_label):
         return key.Key("C", "major")
 
 
-def get_scale_7_pitches(k_obj, is_major):
-    try:
-        sc = (
-            key.Key(k_obj.tonic, "major").getScale("major")
-            if is_major
-            else key.Key(k_obj.tonic, "minor").getScale("harmonic")
-        )
-        pitches_list = list(sc.getPitches("C4", "B4"))
-        if len(pitches_list) >= 7:
-            return pitches_list[:7]
-    except Exception:
-        pass
-
-    tonic_p = pitch.Pitch(f"{k_obj.tonic.name}4")
-    steps = [0, 2, 4, 5, 7, 9, 11] if is_major else [0, 2, 3, 5, 7, 8, 11]
-    return [tonic_p.transpose(s) for s in steps]
-
-
-def _diatonic_triad_pitches(tonic_str, is_major):
-    k_obj = parse_key_safe(f"{tonic_str} {'major' if is_major else 'minor'}")
-    scale_p = get_scale_7_pitches(k_obj, is_major)
+def _music21_triads_for_key(k_obj, deg_list):
+    """music21의 roman.RomanNumeral(deg, k_obj).pitches로 조성별 3화음을 가져옵니다."""
     triads = []
-
-    for idx in range(7):
-        base_p = pitch.Pitch(scale_p[idx].nameWithOctave)
-        if idx >= 4 and base_p.midi >= 71:
-            base_p.octave -= 1
-
-        p3_raw = pitch.Pitch(scale_p[(idx + 2) % 7].nameWithOctave)
-        p3 = pitch.Pitch(f"{p3_raw.name}{base_p.octave}")
-        if p3.midi <= base_p.midi:
-            p3.octave += 1
-
-        p5_raw = pitch.Pitch(scale_p[(idx + 4) % 7].nameWithOctave)
-        p5 = pitch.Pitch(f"{p5_raw.name}{p3.octave}")
-        if p5.midi <= p3.midi:
-            p5.octave += 1
-
-        triads.append((base_p, p3, p5))
+    for deg in deg_list:
+        rn_obj = roman.RomanNumeral(deg, k_obj)
+        pts = [pitch.Pitch(p.nameWithOctave) for p in rn_obj.pitches[:3]]
+        # 옥타브가 오선 범위에서 너무 벗어나면 조정
+        while pts and pts[-1].midi > 81 and pts[0].midi >= 64:
+            for p in pts:
+                p.octave -= 1
+        while pts and pts[0].midi < 57:
+            for p in pts:
+                p.octave += 1
+        triads.append(pts)
     return triads
 
 
@@ -313,7 +288,6 @@ SYMBOL_FONT = "'DejaVu Sans', 'Segoe UI Symbol', 'Apple SD Gothic Neo', sans-ser
 
 
 def _build_key_signature_svg(k_obj, top_line_y=52.0, line_gap=13.0, start_x=88.0):
-    """조성 조표(# 또는 b)를 높은음자리표 옆에 표시하고 조표 음 이름 맵을 반환합니다."""
     sharps = k_obj.sharps
     sig_svg = []
     key_acc_map = {}
@@ -363,9 +337,9 @@ def draw_key_triads_staff(key_labels):
         k_obj = parse_key_safe(k_label)
         is_major = k_obj.mode == "major"
         tonic_name = k_obj.tonic.name.replace("-", "♭")
-        mode_kor = "장조" if is_major else "단조 (화성단음계)"
+        mode_kor = "장조" if is_major else "단조"
         deg_list = major_degs if is_major else minor_degs
-        triads = _diatonic_triad_pitches(k_obj.tonic.name, is_major)
+        triads = _music21_triads_for_key(k_obj, deg_list)
 
         width = 960
         height = 196
@@ -386,9 +360,9 @@ def draw_key_triads_staff(key_labels):
         start_x = 195
         step_x = 104
 
-        for idx_d, (p1, p3, p5) in enumerate(triads):
+        for idx_d, pts in enumerate(triads):
             cx = start_x + idx_d * step_x
-            for p_item in (p1, p3, p5):
+            for p_item in pts:
                 ny = _pitch_to_svg_y(p_item, top_line_y=top_y, line_gap=gap)
 
                 if ny >= bot_y + gap * 0.45:
@@ -952,25 +926,4 @@ if score is not None:
             )
 
     with t3:
-        st.subheader("MIDI 전체 및 프레이즈 구간 재생")
-        st.audio(make_midi_audio(score), format="audio/midi")
-        for p in st.session_state[phrase_state_key]:
-            if p["시작"] <= p["끝"] and total_m > 0:
-                st.caption(f"{p['이름']} ({p['시작']}~{p['끝']}마디)")
-                st.audio(
-                    make_midi_audio(score, p["시작"], p["끝"]), format="audio/midi"
-                )
-elif isinstance(picked_data, dict) and picked_data:
-    phrases_saved = st.session_state.get(phrase_state_key, [])
-    if phrases_saved:
-        st.subheader("프레이징 구분 근거")
-        for p in phrases_saved:
-            st.markdown(
-                f"""
-                <div class="phrase-box">
-                    <strong>{p.get('이름', '프레이즈')}</strong> (m.{p.get('시작', '?')} ~ m.{p.get('끝', '?')})<br>
-                    <span>근거: {p.get('근거', '')}</span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+        st.subheader("MIDI 전체 및 프레이
