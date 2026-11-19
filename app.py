@@ -296,6 +296,8 @@ def draw_key_triads_staff(key_labels):
   )
   fig.patch.set_facecolor("#FFFFFF")
   staff_lines = [64, 67, 71, 74, 77]
+  ledger_above = [79, 81, 83]
+  ledger_below = [62, 60, 58]
 
   for idx, k_label in enumerate(unique_keys):
     ax = axes[idx][0]
@@ -305,13 +307,14 @@ def draw_key_triads_staff(key_labels):
     is_major = k_obj.mode == "major"
     scale_pitches = get_scale_7_pitches(k_obj, is_major)
 
+    # 오선 5선 그리기 (음표가 줄에 걸칠 때 끊기지 않도록 zorder=1로 배치)
     for sl in staff_lines:
       ax.plot(
           [0.4, 7.6],
           [sl, sl],
           color="#333333",
           linewidth=1.1,
-          alpha=0.85,
+          alpha=0.9,
           zorder=1,
       )
     ax.text(
@@ -331,6 +334,7 @@ def draw_key_triads_staff(key_labels):
       x_pos = 1.3 + deg_idx * 0.9
       root_p = scale_pitches[deg_idx]
 
+      # 도·레·미·파·솔·라·시 각 음 위에 3음씩 쌓기 (1도, 3도, 5도)
       p1_m = root_p.midi
       p2_m = scale_pitches[(deg_idx + 2) % 7].midi + (
           12 if deg_idx + 2 >= 7 else 0
@@ -349,39 +353,46 @@ def draw_key_triads_staff(key_labels):
         p3_m += 12
 
       for note_m in (p1_m, p2_m, p3_m):
-        if note_m < 64:
-          ax.plot(
-              [x_pos - 0.16, x_pos + 0.16],
-              [61, 61],
-              color="#333333",
-              linewidth=1.0,
-              zorder=2,
-          )
-        elif note_m > 77:
-          ax.plot(
-              [x_pos - 0.16, x_pos + 0.16],
-              [80, 80],
-              color="#333333",
-              linewidth=1.0,
-              zorder=2,
-          )
+        # 오선 아래/위 덧줄 표시
+        if note_m <= 62:
+          for lp in ledger_below:
+            if note_m <= lp + 1:
+              ax.plot(
+                  [x_pos - 0.22, x_pos + 0.22],
+                  [lp, lp],
+                  color="#333333",
+                  linewidth=1.1,
+                  zorder=1,
+              )
+        elif note_m >= 79:
+          for lp in ledger_above:
+            if note_m >= lp - 1:
+              ax.plot(
+                  [x_pos - 0.22, x_pos + 0.22],
+                  [lp, lp],
+                  color="#333333",
+                  linewidth=1.1,
+                  zorder=1,
+              )
+
+        # 줄에 걸칠 때 줄이 보이도록 속을 비운(facecolor="none") 온음표 타원
         ell = Ellipse(
             (x_pos, note_m),
-            width=0.25,
+            width=0.26,
             height=1.35,
-            facecolor="#FFFFFF",
+            facecolor="none",
             edgecolor="#1f2937",
-            linewidth=1.7,
+            linewidth=1.8,
             zorder=3,
         )
         ax.add_patch(ell)
 
       ax.plot(
-          [x_pos + 0.12, x_pos + 0.12],
+          [x_pos + 0.13, x_pos + 0.13],
           [p1_m, p3_m],
           color="#1f2937",
           linewidth=1.1,
-          zorder=3,
+          zorder=2,
       )
 
       roman, func_label = degree_meta[deg_idx]
