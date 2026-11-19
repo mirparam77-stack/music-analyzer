@@ -261,7 +261,6 @@ def get_scale_7_pitches(k_obj, is_major):
 
 
 def _diatonic_triad_pitches(tonic_str, is_major):
-  """music21 음계로부터 1도~7도 다이아토닉 3화음(1음, 3음, 5음)을 구성하고, 오선 범위 안에 안정적으로 배치합니다."""
   k_obj = parse_key_safe(f"{tonic_str} {'major' if is_major else 'minor'}")
   scale_p = get_scale_7_pitches(k_obj, is_major)
   triads = []
@@ -285,7 +284,6 @@ def _diatonic_triad_pitches(tonic_str, is_major):
 
 
 def _pitch_to_svg_y(p_obj, top_line_y=44.0, line_gap=11.0):
-  """높은음자리표 오선 좌표 변환 (G4 = 4째 줄 = top_line_y + 3*line_gap)."""
   staff_step_map = {
       81: -2.0,
       79: -1.0,
@@ -313,7 +311,6 @@ def _pitch_to_svg_y(p_obj, top_line_y=44.0, line_gap=11.0):
 
 
 def _build_g_clef_svg(x_center=58.0, top_line_y=44.0, line_gap=11.0):
-  """둘째 줄 G4(top_line_y + 3*line_gap)를 감아 도는 높은음자리표(G clef)를 그립니다."""
   g4_y = top_line_y + 3 * line_gap
   top_y = top_line_y - 12.0
   bot_y = top_line_y + 4 * line_gap + 11.0
@@ -336,7 +333,6 @@ def _build_g_clef_svg(x_center=58.0, top_line_y=44.0, line_gap=11.0):
 
 
 def draw_key_triads_staff(key_labels):
-  """교재 <Ex. 31> 스타일의 SVG 높은음자리표 + 3도 3화음 악보를 렌더링합니다."""
   unique_keys = []
   for k in key_labels:
     if k and k not in unique_keys:
@@ -454,11 +450,9 @@ def draw_key_triads_staff(key_labels):
       height=min(620, 205 * len(unique_keys)),
       scrolling=True,
   )
-  return None
 
 
 def render_major_minor_function_box():
-  """교재의 장조/단조 도수 대응 및 화성 기능 대조표를 렌더링합니다."""
   st.markdown(
       "#### 📘 장조 · 단조 화성 기능 대조표 (Tonic / Subdominant / Dominant)"
   )
@@ -876,7 +870,6 @@ if score is not None:
           score, df_v, total_m
       )
 
-# 상단 요약 카드
 if score is not None or (isinstance(picked_data, dict) and picked_data):
   accent_color = cmap.get("accent", cmap.get("border", "#4a6fa5"))
   st.markdown(
@@ -892,7 +885,6 @@ if score is not None or (isinstance(picked_data, dict) and picked_data):
       unsafe_allow_html=True,
   )
 
-# 조성/전조 감지 흐름 + 관련 조성 3화음 오선 악보 + 장/단조 기능 박스
 if score is not None or (isinstance(picked_data, dict) and picked_data):
   st.subheader("🎹 조성 및 전조 감지 흐름")
   fallback_key = (
@@ -935,4 +927,71 @@ if score is not None or (isinstance(picked_data, dict) and picked_data):
       expanded=True,
   ):
     st.write(f"**표시 조성 목록 (전조 포함):** {', '.join(related_keys)}")
-    draw
+    draw_key_triads_staff(related_keys)
+    render_major_minor_function_box()
+
+if score is not None:
+  t1, t2, t3 = st.tabs([
+      "📊 통합 대시보드",
+      "🎼 수직 화성 상세",
+      "🎧 MIDI 구간 재생기",
+  ])
+
+  with t1:
+    st.subheader("1. 프레이즈 구간 컬러 흐름")
+    if st.session_state[phrase_state_key]:
+      st.pyplot(
+          draw_phrase_timeline_chart(
+              st.session_state[phrase_state_key], total_m, cmap
+          )
+      )
+
+    st.subheader("2. 수직 화성 및 로마숫자 기능 표")
+    st.dataframe(df_v, use_container_width=True, height=320)
+
+    st.subheader("3. 프레이징 구분 근거")
+    for p in st.session_state[phrase_state_key]:
+      st.markdown(
+          f"""
+          <div class="phrase-box">
+              <strong>{p.get('이름', '프레이즈')}</strong> (m.{p.get('시작', '?')} ~ m.{p.get('끝', '?')})<br>
+              <span>근거: {p.get('근거', '')}</span>
+          </div>
+          """,
+          unsafe_allow_html=True,
+      )
+
+  with t2:
+    st.subheader("수직 화성 및 로마숫자 상세 표")
+    st.dataframe(df_v, use_container_width=True)
+    if not df_v.empty:
+      st.download_button(
+          "📥 수직 화성 CSV 다운로드",
+          data=df_v.to_csv(index=False).encode("utf-8-sig"),
+          file_name=f"{source_title}_vertical_v3.csv",
+          mime="text/csv",
+      )
+
+  with t3:
+    st.subheader("MIDI 전체 및 프레이즈 구간 재생")
+    st.audio(make_midi_audio(score), format="audio/midi")
+    for p in st.session_state[phrase_state_key]:
+      if p["시작"] <= p["끝"] and total_m > 0:
+        st.caption(f"{p['이름']} ({p['시작']}~{p['끝']}마디)")
+        st.audio(
+            make_midi_audio(score, p["시작"], p["끝"]), format="audio/midi"
+        )
+elif isinstance(picked_data, dict) and picked_data:
+  phrases_saved = st.session_state.get(phrase_state_key, [])
+  if phrases_saved:
+    st.subheader("프레이징 구분 근거")
+    for p in phrases_saved:
+      st.markdown(
+          f"""
+          <div class="phrase-box">
+              <strong>{p.get('이름', '프레이즈')}</strong> (m.{p.get('시작', '?')} ~ m.{p.get('끝', '?')})<br>
+              <span>근거: {p.get('근거', '')}</span>
+          </div>
+          """,
+          unsafe_allow_html=True,
+      )
