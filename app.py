@@ -926,4 +926,25 @@ if score is not None:
             )
 
     with t3:
-        st.subheader("MIDI 전체 및 프레이
+        st.subheader("MIDI 전체 및 프레이즈 구간 재생")
+        st.audio(make_midi_audio(score), format="audio/midi")
+        for p in st.session_state[phrase_state_key]:
+            if p["시작"] <= p["끝"] and total_m > 0:
+                st.caption(f"{p['이름']} ({p['시작']}~{p['끝']}마디)")
+                st.audio(
+                    make_midi_audio(score, p["시작"], p["끝"]), format="audio/midi"
+                )
+elif isinstance(picked_data, dict) and picked_data:
+    phrases_saved = st.session_state.get(phrase_state_key, [])
+    if phrases_saved:
+        st.subheader("프레이징 구분 근거")
+        for p in phrases_saved:
+            st.markdown(
+                f"""
+                <div class="phrase-box">
+                    <strong>{p.get('이름', '프레이즈')}</strong> (m.{p.get('시작', '?')} ~ m.{p.get('끝', '?')})<br>
+                    <span>근거: {p.get('근거', '')}</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
