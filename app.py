@@ -261,7 +261,7 @@ def get_scale_7_pitches(k_obj, is_major):
 
 
 def draw_key_triads_staff(key_labels):
-  """각 조성(전조 포함)의 7개 음계음 위 3화음과 로마숫자·화성 기능(T/S/D)을 오선 악보로 그립니다."""
+  """각 조성(전조 포함)의 7개 음계음 위 3화음과 로마숫자·화성 기능(T/S/D)을 높은음자리표 오선 악보로 그립니다."""
   unique_keys = []
   for k in key_labels:
     if k and k not in unique_keys:
@@ -291,16 +291,17 @@ def draw_key_triads_staff(key_labels):
   fig, axes = plt.subplots(
       len(unique_keys),
       1,
-      figsize=(11.5, 4.4 * len(unique_keys)),
+      figsize=(11.5, 4.6 * len(unique_keys)),
       squeeze=False,
   )
   fig.patch.set_facecolor("#FFFFFF")
 
   staff_x_start = 0.4
   staff_x_end = 7.6
-  staff_lines = [64, 67, 71, 74, 77]
-  ledger_above = [79, 81, 83]
-  ledger_below = [62, 60, 58]
+  # 5선 간격을 모두 동일(3단위)하게 설정
+  staff_lines = [64, 67, 70, 73, 76]
+  ledger_above = [79, 82]
+  ledger_below = [61, 58]
 
   for idx, k_label in enumerate(unique_keys):
     ax = axes[idx][0]
@@ -311,23 +312,26 @@ def draw_key_triads_staff(key_labels):
     is_major = k_obj.mode == "major"
     scale_pitches = get_scale_7_pitches(k_obj, is_major)
 
+    # 일정 간격 오선 5선 그리기
     for sl in staff_lines:
       ax.plot(
           [staff_x_start, staff_x_end],
           [sl, sl],
           color="#333333",
-          linewidth=1.1,
+          linewidth=1.15,
           alpha=0.9,
           zorder=1,
       )
+
+    # 높은음자리표(G clef) 배치
     ax.text(
-        0.58,
-        70.5,
+        0.62,
+        70.0,
         "𝄞",
-        fontsize=28,
+        fontsize=34,
         va="center",
         ha="center",
-        color="#222222",
+        color="#1f2937",
         zorder=2,
         fontproperties=KR_FONT,
     )
@@ -337,52 +341,43 @@ def draw_key_triads_staff(key_labels):
       x_pos = 1.35 + deg_idx * 0.92
       root_p = scale_pitches[deg_idx]
 
-      p1_m = root_p.midi
-      p2_m = scale_pitches[(deg_idx + 2) % 7].midi + (
-          12 if deg_idx + 2 >= 7 else 0
-      )
-      p3_m = scale_pitches[(deg_idx + 4) % 7].midi + (
-          12 if deg_idx + 4 >= 7 else 0
-      )
+      # 화음 3음의 세로 간격을 촘촘하게 모아 꽉 차 보이도록 배치
+      base_y = 61.0 + deg_idx * 2.1
+      p1_y = base_y
+      p2_y = base_y + 2.55
+      p3_y = base_y + 5.10
 
-      while p3_m > 81:
-        p1_m -= 12
-        p2_m -= 12
-        p3_m -= 12
-      while p1_m < 60:
-        p1_m += 12
-        p2_m += 12
-        p3_m += 12
-
-      for note_m in (p1_m, p2_m, p3_m):
-        if note_m <= 62:
+      for note_y in (p1_y, p2_y, p3_y):
+        # 오선 아래/위 덧줄 표시
+        if note_y <= 61.5:
           for lp in ledger_below:
-            if note_m <= lp + 1:
+            if note_y <= lp + 1.2:
               ax.plot(
-                  [x_pos - 0.25, x_pos + 0.25],
+                  [x_pos - 0.28, x_pos + 0.28],
                   [lp, lp],
                   color="#333333",
-                  linewidth=1.1,
+                  linewidth=1.15,
                   zorder=1,
               )
-        elif note_m >= 79:
+        elif note_y >= 78.5:
           for lp in ledger_above:
-            if note_m >= lp - 1:
+            if note_y >= lp - 1.2:
               ax.plot(
-                  [x_pos - 0.25, x_pos + 0.25],
+                  [x_pos - 0.28, x_pos + 0.28],
                   [lp, lp],
                   color="#333333",
-                  linewidth=1.1,
+                  linewidth=1.15,
                   zorder=1,
               )
 
+        # 줄과 줄 사이를 꽉 채우고 상하 음표가 붙도록 온음표 타원 확대
         ell = Ellipse(
-            (x_pos, note_m),
-            width=0.35,
-            height=2.55,
+            (x_pos, note_y),
+            width=0.38,
+            height=3.15,
             facecolor="none",
             edgecolor="#1f2937",
-            linewidth=1.85,
+            linewidth=1.9,
             zorder=3,
         )
         ax.add_patch(ell)
@@ -390,7 +385,7 @@ def draw_key_triads_staff(key_labels):
       roman, func_label = degree_meta[deg_idx]
       ax.text(
           x_pos,
-          56.2,
+          55.5,
           roman,
           fontsize=10.5,
           fontweight="bold",
@@ -401,7 +396,7 @@ def draw_key_triads_staff(key_labels):
       )
       ax.text(
           x_pos,
-          52.2,
+          51.5,
           func_label,
           fontsize=8.3,
           ha="center",
@@ -420,7 +415,7 @@ def draw_key_triads_staff(key_labels):
         fontproperties=KR_FONT,
     )
     ax.set_xlim(0.1, 7.9)
-    ax.set_ylim(44.0, 84.0)
+    ax.set_ylim(43.0, 85.0)
     ax.axis("off")
 
   fig.subplots_adjust(hspace=0.35)
@@ -965,6 +960,3 @@ elif isinstance(picked_data, dict) and picked_data:
               <strong>{p.get('이름', '프레이즈')}</strong> (m.{p.get('시작', '?')} ~ m.{p.get('끝', '?')})<br>
               <span>근거: {p.get('근거', '')}</span>
           </div>
-          """,
-          unsafe_allow_html=True,
-      )
