@@ -277,7 +277,7 @@ def _diatonic_triad_pitches(tonic_str, is_major):
     return triads
 
 
-def _pitch_to_svg_y(p_obj, top_line_y=44.0, line_gap=11.0):
+def _pitch_to_svg_y(p_obj, top_line_y=48.0, line_gap=13.0):
     staff_step_map = {
         81: -2.0,
         79: -1.0,
@@ -304,24 +304,24 @@ def _pitch_to_svg_y(p_obj, top_line_y=44.0, line_gap=11.0):
     return top_line_y + step * line_gap
 
 
-def _build_g_clef_svg(x_center=58.0, top_line_y=44.0, line_gap=11.0):
+def _build_g_clef_svg(x_center=58.0, top_line_y=48.0, line_gap=13.0):
     g4_y = top_line_y + 3 * line_gap
-    top_y = top_line_y - 12.0
-    bot_y = top_line_y + 4 * line_gap + 11.0
+    top_y = top_line_y - 13.0
+    bot_y = top_line_y + 4 * line_gap + 12.0
     cx = x_center
     return f"""
     <g>
-        <path d="M {cx} {g4_y + 3.5}
-                 C {cx + 12} {g4_y + 3.5}, {cx + 13} {g4_y - 9.5}, {cx - 2} {g4_y - 11.5}
-                 C {cx - 14} {g4_y - 13.0}, {cx - 15} {g4_y + 1.5}, {cx - 4} {g4_y + 6.5}
-                 C {cx + 7} {g4_y + 11.0}, {cx + 13} {g4_y - 2.0}, {cx + 4} {g4_y - 17.5}
-                 C {cx - 6} {g4_y - 31.0}, {cx + 8} {top_y + 2.0}, {cx + 2} {top_y}
-                 C {cx - 3} {top_y - 1.5}, {cx - 2} {top_y + 14.0}, {cx - 1} {bot_y - 8.0}
-                 C {cx - 1} {bot_y}, {cx - 8} {bot_y + 3.0}, {cx - 11} {bot_y - 2.5}
-                 C {cx - 13} {bot_y - 6.5}, {cx - 7} {bot_y - 8.5}, {cx - 5} {bot_y - 5.5}"
+        <path d="M {cx} {g4_y + 4.0}
+                 C {cx + 13} {g4_y + 4.0}, {cx + 14} {g4_y - 11.0}, {cx - 2} {g4_y - 13.0}
+                 C {cx - 15} {g4_y - 15.0}, {cx - 16} {g4_y + 2.0}, {cx - 4} {g4_y + 7.5}
+                 C {cx + 8} {g4_y + 12.5}, {cx + 14} {g4_y - 2.5}, {cx + 4} {g4_y - 20.5}
+                 C {cx - 7} {g4_y - 36.0}, {cx + 8} {top_y + 2.0}, {cx + 2} {top_y}
+                 C {cx - 3} {top_y - 1.5}, {cx - 2} {top_y + 16.0}, {cx - 1} {bot_y - 9.0}
+                 C {cx - 1} {bot_y}, {cx - 8} {bot_y + 3.5}, {cx - 11} {bot_y - 3.0}
+                 C {cx - 13} {bot_y - 7.5}, {cx - 7} {bot_y - 9.5}, {cx - 5} {bot_y - 6.0}"
               fill="none" stroke="#111827" stroke-width="2.35"
               stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="{cx - 7.5}" cy="{bot_y - 4.0}" r="2.7" fill="#111827"/>
+        <circle cx="{cx - 7.5}" cy="{bot_y - 4.5}" r="2.7" fill="#111827"/>
     </g>
     """
 
@@ -347,9 +347,9 @@ def draw_key_triads_staff(key_labels):
         triads = _diatonic_triad_pitches(k_obj.tonic.name, is_major)
 
         width = 920
-        height = 172
-        top_y = 44.0
-        gap = 11.0
+        height = 192
+        top_y = 48.0
+        gap = 13.0
         staff_left = 24
         staff_right = 896
         bot_y = top_y + 4 * gap
@@ -390,11 +390,11 @@ def draw_key_triads_staff(key_labels):
                     )
 
                 notes_svg.append(
-                    f'<ellipse cx="{cx}" cy="{ny}" rx="8.0" ry="5.1" fill="none" stroke="#111" stroke-width="2.0"/>'
+                    f'<ellipse cx="{cx}" cy="{ny}" rx="8.0" ry="4.2" fill="none" stroke="#111" stroke-width="2.0"/>'
                 )
 
             labels_svg.append(
-                f'<text x="{cx}" y="{bot_y + 28}" font-size="13" font-weight="bold" fill="#111" text-anchor="middle" font-family="sans-serif">{deg_list[idx_d]}</text>'
+                f'<text x="{cx}" y="{bot_y + 30}" font-size="13" font-weight="bold" fill="#111" text-anchor="middle" font-family="sans-serif">{deg_list[idx_d]}</text>'
             )
 
         staff_svg = []
@@ -435,7 +435,7 @@ def draw_key_triads_staff(key_labels):
             {''.join(blocks_html)}
         </div>
         """,
-        height=min(620, 205 * len(unique_keys)),
+        height=min(660, 225 * len(unique_keys)),
         scrolling=True,
     )
 
