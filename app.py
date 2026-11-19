@@ -288,6 +288,7 @@ def draw_key_triads_staff(key_labels):
       ("vii°", "D\n(Leading-Tone)"),
   ]
 
+  # 조성 수에 비례해 고정된 오선지 높이와 폭 유지
   fig, axes = plt.subplots(
       len(unique_keys),
       1,
@@ -295,6 +296,9 @@ def draw_key_triads_staff(key_labels):
       squeeze=False,
   )
   fig.patch.set_facecolor("#FFFFFF")
+
+  staff_x_start = 0.4
+  staff_x_end = 7.6
   staff_lines = [64, 67, 71, 74, 77]
   ledger_above = [79, 81, 83]
   ledger_below = [62, 60, 58]
@@ -302,15 +306,16 @@ def draw_key_triads_staff(key_labels):
   for idx, k_label in enumerate(unique_keys):
     ax = axes[idx][0]
     ax.set_facecolor("#FFFDF9")
+    ax.set_aspect("auto")
 
     k_obj = parse_key_safe(k_label)
     is_major = k_obj.mode == "major"
     scale_pitches = get_scale_7_pitches(k_obj, is_major)
 
-    # 오선 5선 그리기
+    # 고정 폭의 오선 5선 그리기
     for sl in staff_lines:
       ax.plot(
-          [0.4, 7.6],
+          [staff_x_start, staff_x_end],
           [sl, sl],
           color="#333333",
           linewidth=1.1,
@@ -318,7 +323,7 @@ def draw_key_triads_staff(key_labels):
           zorder=1,
       )
     ax.text(
-        0.55,
+        0.58,
         70.5,
         "𝄞",
         fontsize=28,
@@ -331,10 +336,10 @@ def draw_key_triads_staff(key_labels):
 
     degree_meta = major_info if is_major else minor_info
     for deg_idx in range(7):
-      x_pos = 1.3 + deg_idx * 0.9
+      x_pos = 1.35 + deg_idx * 0.92
       root_p = scale_pitches[deg_idx]
 
-      # 도·레·미·파·솔·라·시 각 음 위에 3음씩 쌓기 (1도, 3도, 5도)
+      # 각 음계 음 위에 1도·3도·5도 3화음 구성음 배치
       p1_m = root_p.midi
       p2_m = scale_pitches[(deg_idx + 2) % 7].midi + (
           12 if deg_idx + 2 >= 7 else 0
@@ -358,7 +363,7 @@ def draw_key_triads_staff(key_labels):
           for lp in ledger_below:
             if note_m <= lp + 1:
               ax.plot(
-                  [x_pos - 0.24, x_pos + 0.24],
+                  [x_pos - 0.25, x_pos + 0.25],
                   [lp, lp],
                   color="#333333",
                   linewidth=1.1,
@@ -368,21 +373,21 @@ def draw_key_triads_staff(key_labels):
           for lp in ledger_above:
             if note_m >= lp - 1:
               ax.plot(
-                  [x_pos - 0.24, x_pos + 0.24],
+                  [x_pos - 0.25, x_pos + 0.25],
                   [lp, lp],
                   color="#333333",
                   linewidth=1.1,
                   zorder=1,
               )
 
-        # 기둥선 없이 온음표 모양의 둥근 타원(속을 비워 줄이 관통해 보이도록 처리)
+        # 세 음이 꽉 차 보이도록 살짝 맞닿는 높이와 속이 빈 온음표 타원 적용
         ell = Ellipse(
             (x_pos, note_m),
-            width=0.34,
-            height=2.35,
+            width=0.35,
+            height=2.55,
             facecolor="none",
             edgecolor="#1f2937",
-            linewidth=1.8,
+            linewidth=1.85,
             zorder=3,
         )
         ax.add_patch(ell)
@@ -390,7 +395,7 @@ def draw_key_triads_staff(key_labels):
       roman, func_label = degree_meta[deg_idx]
       ax.text(
           x_pos,
-          56.5,
+          56.2,
           roman,
           fontsize=10.5,
           fontweight="bold",
@@ -401,7 +406,7 @@ def draw_key_triads_staff(key_labels):
       )
       ax.text(
           x_pos,
-          52.5,
+          52.2,
           func_label,
           fontsize=8.3,
           ha="center",
@@ -423,7 +428,7 @@ def draw_key_triads_staff(key_labels):
     ax.set_ylim(44.0, 84.0)
     ax.axis("off")
 
-  plt.tight_layout()
+  fig.subplots_adjust(hspace=0.35)
   return fig
 
 
@@ -952,19 +957,4 @@ if score is not None:
       if p["시작"] <= p["끝"] and total_m > 0:
         st.caption(f"{p['이름']} ({p['시작']}~{p['끝']}마디)")
         st.audio(
-            make_midi_audio(score, p["시작"], p["끝"]), format="audio/midi"
-        )
-elif isinstance(picked_data, dict) and picked_data:
-  phrases_saved = st.session_state.get(phrase_state_key, [])
-  if phrases_saved:
-    st.subheader("프레이징 구분 근거")
-    for p in phrases_saved:
-      st.markdown(
-          f"""
-          <div class="phrase-box">
-              <strong>{p.get('이름', '프레이즈')}</strong> (m.{p.get('시작', '?')} ~ m.{p.get('끝', '?')})<br>
-              <span>근거: {p.get('근거', '')}</span>
-          </div>
-          """,
-          unsafe_allow_html=True,
-      )
+            make_midi_audio(score,
