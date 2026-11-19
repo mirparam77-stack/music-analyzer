@@ -960,3 +960,6 @@ elif isinstance(picked_data, dict) and picked_data:
               <strong>{p.get('이름', '프레이즈')}</strong> (m.{p.get('시작', '?')} ~ m.{p.get('끝', '?')})<br>
               <span>근거: {p.get('근거', '')}</span>
           </div>
+          """,
+          unsafe_allow_html=True,
+      )
