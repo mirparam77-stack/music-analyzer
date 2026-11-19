@@ -288,7 +288,6 @@ def draw_key_triads_staff(key_labels):
       ("vii°", "D\n(Leading-Tone)"),
   ]
 
-  # 조성 수에 비례해 고정된 오선지 높이와 폭 유지
   fig, axes = plt.subplots(
       len(unique_keys),
       1,
@@ -312,7 +311,6 @@ def draw_key_triads_staff(key_labels):
     is_major = k_obj.mode == "major"
     scale_pitches = get_scale_7_pitches(k_obj, is_major)
 
-    # 고정 폭의 오선 5선 그리기
     for sl in staff_lines:
       ax.plot(
           [staff_x_start, staff_x_end],
@@ -339,7 +337,6 @@ def draw_key_triads_staff(key_labels):
       x_pos = 1.35 + deg_idx * 0.92
       root_p = scale_pitches[deg_idx]
 
-      # 각 음계 음 위에 1도·3도·5도 3화음 구성음 배치
       p1_m = root_p.midi
       p2_m = scale_pitches[(deg_idx + 2) % 7].midi + (
           12 if deg_idx + 2 >= 7 else 0
@@ -358,7 +355,6 @@ def draw_key_triads_staff(key_labels):
         p3_m += 12
 
       for note_m in (p1_m, p2_m, p3_m):
-        # 오선 아래/위 덧줄 표시
         if note_m <= 62:
           for lp in ledger_below:
             if note_m <= lp + 1:
@@ -380,7 +376,6 @@ def draw_key_triads_staff(key_labels):
                   zorder=1,
               )
 
-        # 세 음이 꽉 차 보이도록 살짝 맞닿는 높이와 속이 빈 온음표 타원 적용
         ell = Ellipse(
             (x_pos, note_m),
             width=0.35,
@@ -957,4 +952,19 @@ if score is not None:
       if p["시작"] <= p["끝"] and total_m > 0:
         st.caption(f"{p['이름']} ({p['시작']}~{p['끝']}마디)")
         st.audio(
-            make_midi_audio(score,
+            make_midi_audio(score, p["시작"], p["끝"]), format="audio/midi"
+        )
+elif isinstance(picked_data, dict) and picked_data:
+  phrases_saved = st.session_state.get(phrase_state_key, [])
+  if phrases_saved:
+    st.subheader("프레이징 구분 근거")
+    for p in phrases_saved:
+      st.markdown(
+          f"""
+          <div class="phrase-box">
+              <strong>{p.get('이름', '프레이즈')}</strong> (m.{p.get('시작', '?')} ~ m.{p.get('끝', '?')})<br>
+              <span>근거: {p.get('근거', '')}</span>
+          </div>
+          """,
+          unsafe_allow_html=True,
+      )
