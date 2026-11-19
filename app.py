@@ -291,7 +291,7 @@ def draw_key_triads_staff(key_labels):
   fig, axes = plt.subplots(
       len(unique_keys),
       1,
-      figsize=(11.5, 3.9 * len(unique_keys)),
+      figsize=(11.5, 4.4 * len(unique_keys)),
       squeeze=False,
   )
   fig.patch.set_facecolor("#FFFFFF")
@@ -307,7 +307,7 @@ def draw_key_triads_staff(key_labels):
     is_major = k_obj.mode == "major"
     scale_pitches = get_scale_7_pitches(k_obj, is_major)
 
-    # 오선 5선 그리기 (음표가 줄에 걸칠 때 끊기지 않도록 zorder=1로 배치)
+    # 오선 5선 그리기
     for sl in staff_lines:
       ax.plot(
           [0.4, 7.6],
@@ -358,7 +358,7 @@ def draw_key_triads_staff(key_labels):
           for lp in ledger_below:
             if note_m <= lp + 1:
               ax.plot(
-                  [x_pos - 0.22, x_pos + 0.22],
+                  [x_pos - 0.24, x_pos + 0.24],
                   [lp, lp],
                   color="#333333",
                   linewidth=1.1,
@@ -368,32 +368,24 @@ def draw_key_triads_staff(key_labels):
           for lp in ledger_above:
             if note_m >= lp - 1:
               ax.plot(
-                  [x_pos - 0.22, x_pos + 0.22],
+                  [x_pos - 0.24, x_pos + 0.24],
                   [lp, lp],
                   color="#333333",
                   linewidth=1.1,
                   zorder=1,
               )
 
-        # 줄에 걸칠 때 줄이 보이도록 속을 비운(facecolor="none") 온음표 타원
+        # 기둥선 없이 온음표 모양의 둥근 타원(속을 비워 줄이 관통해 보이도록 처리)
         ell = Ellipse(
             (x_pos, note_m),
-            width=0.26,
-            height=1.35,
+            width=0.34,
+            height=2.35,
             facecolor="none",
             edgecolor="#1f2937",
             linewidth=1.8,
             zorder=3,
         )
         ax.add_patch(ell)
-
-      ax.plot(
-          [x_pos + 0.13, x_pos + 0.13],
-          [p1_m, p3_m],
-          color="#1f2937",
-          linewidth=1.1,
-          zorder=2,
-      )
 
       roman, func_label = degree_meta[deg_idx]
       ax.text(
