@@ -1023,7 +1023,8 @@ if score is not None:
       else:
         st.error("시작 마디가 끝 마디보다 클 수 없습니다.")
 
-else:
+elif not (isinstance(picked_data, dict) and picked_data):
   st.info(
-      "👈 왼쪽 사이드바에서 악보 파일을 업로드해 주세요. (활동 시대 기본값: **고전주의**)"
+      " 👉 왼쪽 사이드바에서 악보 파일을 업로드해 주세요. (활동 시대 기본값:"
+      " **고전주의**)"
   )
