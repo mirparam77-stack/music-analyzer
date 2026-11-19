@@ -262,22 +262,23 @@ def get_scale_7_pitches(k_obj, is_major):
 
 
 def draw_treble_clef(ax, cx=0.68, cy=70.0):
-  """높은음자리표(G clef)를 벡터 곡선으로 그려 폰트 누락 없이 선명하게 표시합니다."""
+  """자연스러운 곡선의 높은음자리표(G clef)를 그립니다."""
+  # G선(y=67) 주변 고리 + 부드러운 상단 루프 + 하단 갈고리
   verts = [
-      (cx + 0.02, cy - 5.2),
-      (cx + 0.18, cy - 3.6),
-      (cx + 0.16, cy - 1.2),
-      (cx - 0.14, cy - 0.4),
-      (cx - 0.18, cy + 2.1),
-      (cx + 0.12, cy + 3.4),
-      (cx + 0.14, cy + 6.4),
-      (cx + 0.04, cy + 8.6),
-      (cx - 0.04, cy + 6.2),
-      (cx - 0.03, cy - 3.8),
-      (cx - 0.04, cy - 6.6),
-      (cx - 0.18, cy - 7.4),
-      (cx - 0.24, cy - 6.2),
-      (cx - 0.12, cy - 5.8),
+      (cx - 0.02, cy - 3.0),
+      (cx + 0.16, cy - 3.0),
+      (cx + 0.18, cy - 0.8),
+      (cx - 0.14, cy - 0.5),
+      (cx - 0.16, cy + 2.2),
+      (cx + 0.10, cy + 4.2),
+      (cx + 0.08, cy + 6.8),
+      (cx + 0.02, cy + 7.4),
+      (cx - 0.02, cy + 5.8),
+      (cx - 0.02, cy - 5.2),
+      (cx - 0.02, cy - 6.8),
+      (cx - 0.15, cy - 7.2),
+      (cx - 0.18, cy - 6.2),
+      (cx - 0.10, cy - 5.9),
   ]
   codes = [
       Path.MOVETO,
@@ -295,16 +296,15 @@ def draw_treble_clef(ax, cx=0.68, cy=70.0):
       Path.CURVE4,
       Path.CURVE4,
   ]
-  path = Path(verts, codes)
   patch = PathPatch(
-      path,
+      Path(verts, codes),
       facecolor="none",
       edgecolor="#1f2937",
-      linewidth=2.0,
+      linewidth=1.9,
       zorder=3,
   )
   ax.add_patch(patch)
-  ax.scatter([cx - 0.14], [cy - 6.3], s=26, color="#1f2937", zorder=3)
+  ax.scatter([cx - 0.10], [cy - 6.3], s=22, color="#1f2937", zorder=3)
 
 
 def draw_key_triads_staff(key_labels):
@@ -376,16 +376,26 @@ def draw_key_triads_staff(key_labels):
     degree_meta = major_info if is_major else minor_info
     for deg_idx in range(7):
       x_pos = 1.35 + deg_idx * 0.92
-      _ = scale_pitches[deg_idx]
+      root_p = scale_pitches[deg_idx]
+      third_p = scale_pitches[(deg_idx + 2) % 7]
+      fifth_p = scale_pitches[(deg_idx + 4) % 7]
 
-      # 타원 접경이 살짝 맞닿아 꽉 차 보이되 고리가 되지 않는 적정 간격 및 크기
-      base_y = 61.0 + deg_idx * 2.05
-      for note_y in (base_y, base_y + 2.05, base_y + 4.10):
+      # 실제 화음의 음정 차이(반음 수)를 반영해 3도 쌓기 화음 모양 유지
+      iv_13 = max(3, min(4, interval.Interval(root_p, third_p).semitones))
+      iv_35 = max(3, min(4, interval.Interval(third_p, fifth_p).semitones))
+
+      # 오선(61~82) 범위 내에 맞춰 3화음 세 음의 y좌표 산출
+      step_y = 1.95
+      p1_y = 61.0 + deg_idx * 1.45
+      p2_y = p1_y + step_y * (iv_13 / 3.5)
+      p3_y = p2_y + step_y * (iv_35 / 3.5)
+
+      for note_y in (p1_y, p2_y, p3_y):
         if note_y <= 61.5:
           for lp in ledger_below:
             if note_y <= lp + 1.1:
               ax.plot(
-                  [x_pos - 0.27, x_pos + 0.27],
+                  [x_pos - 0.26, x_pos + 0.26],
                   [lp, lp],
                   color="#333333",
                   linewidth=1.15,
@@ -395,17 +405,18 @@ def draw_key_triads_staff(key_labels):
           for lp in ledger_above:
             if note_y >= lp - 1.1:
               ax.plot(
-                  [x_pos - 0.27, x_pos + 0.27],
+                  [x_pos - 0.26, x_pos + 0.26],
                   [lp, lp],
                   color="#333333",
                   linewidth=1.15,
                   zorder=1,
               )
 
+        # 음표 세 개가 서로 살짝 맞닿아 꽉 차게 보이도록 설정
         ell = Ellipse(
             (x_pos, note_y),
-            width=0.36,
-            height=2.45,
+            width=0.34,
+            height=2.25,
             facecolor="none",
             edgecolor="#1f2937",
             linewidth=1.8,
