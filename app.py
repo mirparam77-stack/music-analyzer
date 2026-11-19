@@ -687,54 +687,54 @@ with st.sidebar:
 
   st.divider()
   st.header("🗄️ 보관된 곡 목록")
-if db:
-      history_list = db.get("history", []) if isinstance(db, dict) else []
-      song_labels = [
-          (
-              f"{item.get('title', f'곡_{i+1}')}"
-              f" ({item.get('composer', '')})".strip(" ()")
-          )
-          for i, item in enumerate(history_list)
-      ]
-last_title = (
-        db.get("last_selected_song") if isinstance(db, dict) else None
-    )
-default_idx = 0
-if last_title and history_list:
-      for i, item in enumerate(history_list):
-        if isinstance(item, dict) and (
-            item.get("title") == last_title or item.get("곡명") == last_title
-        ):
-          default_idx = i
-          break
+  if db:
+        history_list = db.get("history", []) if isinstance(db, dict) else []
+        song_labels = [
+            (
+                f"{item.get('title', f'곡_{i+1}')}"
+                f" ({item.get('composer', '')})".strip(" ()")
+            )
+            for i, item in enumerate(history_list)
+        ]
+  last_title = (
+          db.get("last_selected_song") if isinstance(db, dict) else None
+      )
+  default_idx = 0
+  if last_title and history_list:
+        for i, item in enumerate(history_list):
+          if isinstance(item, dict) and (
+              item.get("title") == last_title or item.get("곡명") == last_title
+          ):
+            default_idx = i
+            break
 
-picked_song = st.selectbox(
-        "보관 곡 선택", song_labels, index=default_idx
-    )
-col_del1, col_del2 = st.columns(2)
-with col_del1:
-      if st.button("🗑️ 선택 곡 삭제", use_container_width=True):
-        if delete_song(picked_song):
-          st.success(f"'{picked_song}' 삭제 완료")
-          st.rerun()
-with col_del2:
-     st.write("")
-picked_idx = song_labels.index(picked_song) if song_labels else 0
-picked_data = history_list[picked_idx] if history_list else {}
-if isinstance(picked_data, dict):
-      st.write(f"**항목 키:** `{picked_song}`")
-      if "title" in picked_data:
-        st.write(f"**곡명:** {picked_data.get('title')}")
-      if "composer" in picked_data:
-        st.write(f"**작곡가:** {picked_data.get('composer')}")
-      if "era" in picked_data:
-        st.write(f"**시대:** {picked_data.get('era')}")
-      if "total_measures" in picked_data:
-        st.write(f"**마디 수:** {picked_data.get('total_measures')}")
-      elif isinstance(picked_data, list):
-        st.write(f"**보관 건수:** {len(picked_data)}건")
-else:
-    st.caption("보관된 곡이 없습니다.")
+  picked_song = st.selectbox(
+          "보관 곡 선택", song_labels, index=default_idx
+      )
+  col_del1, col_del2 = st.columns(2)
+  with col_del1:
+        if st.button("🗑️ 선택 곡 삭제", use_container_width=True):
+          if delete_song(picked_song):
+            st.success(f"'{picked_song}' 삭제 완료")
+            st.rerun()
+  with col_del2:
+       st.write("")
+  picked_idx = song_labels.index(picked_song) if song_labels else 0
+  picked_data = history_list[picked_idx] if history_list else {}
+  if isinstance(picked_data, dict):
+        st.write(f"**항목 키:** `{picked_song}`")
+        if "title" in picked_data:
+          st.write(f"**곡명:** {picked_data.get('title')}")
+        if "composer" in picked_data:
+          st.write(f"**작곡가:** {picked_data.get('composer')}")
+        if "era" in picked_data:
+          st.write(f"**시대:** {picked_data.get('era')}")
+        if "total_measures" in picked_data:
+          st.write(f"**마디 수:** {picked_data.get('total_measures')}")
+        elif isinstance(picked_data, list):
+          st.write(f"**보관 건수:** {len(picked_data)}건")
+  else:
+      st.caption("보관된 곡이 없습니다.")
 
 # ==========================================
 # 9. 메인 대시보드 실행
