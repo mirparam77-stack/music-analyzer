@@ -4,7 +4,8 @@ import os
 import re
 import tempfile
 from matplotlib import font_manager
-from matplotlib.patches import Ellipse
+from matplotlib.patches import Ellipse, PathPatch
+from matplotlib.path import Path
 import matplotlib.pyplot as plt
 from music21 import chord, converter, interval, key, midi, note, pitch, roman, stream
 import pandas as pd
@@ -260,6 +261,52 @@ def get_scale_7_pitches(k_obj, is_major):
   return [tonic_p.transpose(s) for s in steps]
 
 
+def draw_treble_clef(ax, cx=0.68, cy=70.0):
+  """높은음자리표(G clef)를 벡터 곡선으로 그려 폰트 누락 없이 선명하게 표시합니다."""
+  verts = [
+      (cx + 0.02, cy - 5.2),
+      (cx + 0.18, cy - 3.6),
+      (cx + 0.16, cy - 1.2),
+      (cx - 0.14, cy - 0.4),
+      (cx - 0.18, cy + 2.1),
+      (cx + 0.12, cy + 3.4),
+      (cx + 0.14, cy + 6.4),
+      (cx + 0.04, cy + 8.6),
+      (cx - 0.04, cy + 6.2),
+      (cx - 0.03, cy - 3.8),
+      (cx - 0.04, cy - 6.6),
+      (cx - 0.18, cy - 7.4),
+      (cx - 0.24, cy - 6.2),
+      (cx - 0.12, cy - 5.8),
+  ]
+  codes = [
+      Path.MOVETO,
+      Path.CURVE4,
+      Path.CURVE4,
+      Path.CURVE4,
+      Path.CURVE4,
+      Path.CURVE4,
+      Path.CURVE4,
+      Path.CURVE4,
+      Path.CURVE4,
+      Path.LINETO,
+      Path.CURVE4,
+      Path.CURVE4,
+      Path.CURVE4,
+      Path.CURVE4,
+  ]
+  path = Path(verts, codes)
+  patch = PathPatch(
+      path,
+      facecolor="none",
+      edgecolor="#1f2937",
+      linewidth=2.0,
+      zorder=3,
+  )
+  ax.add_patch(patch)
+  ax.scatter([cx - 0.14], [cy - 6.3], s=26, color="#1f2937", zorder=3)
+
+
 def draw_key_triads_staff(key_labels):
   """각 조성(전조 포함)의 7개 음계음 위 3화음과 로마숫자·화성 기능(T/S/D)을 높은음자리표 오선 악보로 그립니다."""
   unique_keys = []
@@ -271,7 +318,7 @@ def draw_key_triads_staff(key_labels):
 
   major_info = [
       ("I", "T\n(Tonic)"),
-      ("ii", "S 대리\n(Supertonic)"),
+      ("ii", "S sub.\n(Supertonic)"),
       ("iii", "T/D\n(Mediant)"),
       ("IV", "S\n(Subdominant)"),
       ("V", "D\n(Dominant)"),
@@ -291,7 +338,7 @@ def draw_key_triads_staff(key_labels):
   fig, axes = plt.subplots(
       len(unique_keys),
       1,
-      figsize=(11.5, 4.6 * len(unique_keys)),
+      figsize=(11.5, 4.5 * len(unique_keys)),
       squeeze=False,
   )
   fig.patch.set_facecolor("#FFFFFF")
@@ -323,37 +370,22 @@ def draw_key_triads_staff(key_labels):
           zorder=1,
       )
 
-    # 높은음자리표(G clef) 배치
-    ax.text(
-        0.62,
-        70.0,
-        "𝄞",
-        fontsize=34,
-        va="center",
-        ha="center",
-        color="#1f2937",
-        zorder=2,
-        fontproperties=KR_FONT,
-    )
+    # 높은음자리표 그리기
+    draw_treble_clef(ax, cx=0.68, cy=70.0)
 
     degree_meta = major_info if is_major else minor_info
     for deg_idx in range(7):
       x_pos = 1.35 + deg_idx * 0.92
-      root_p = scale_pitches[deg_idx]
+      _ = scale_pitches[deg_idx]
 
-      # 화음 3음의 세로 간격을 촘촘하게 모아 꽉 차 보이도록 배치
-      base_y = 61.0 + deg_idx * 2.1
-      p1_y = base_y
-      p2_y = base_y + 2.55
-      p3_y = base_y + 5.10
-
-      for note_y in (p1_y, p2_y, p3_y):
-        # 오선 아래/위 덧줄 표시
+      # 타원 접경이 살짝 맞닿아 꽉 차 보이되 고리가 되지 않는 적정 간격 및 크기
+      base_y = 61.0 + deg_idx * 2.05
+      for note_y in (base_y, base_y + 2.05, base_y + 4.10):
         if note_y <= 61.5:
           for lp in ledger_below:
-            if note_y <= lp + 1.2:
+            if note_y <= lp + 1.1:
               ax.plot(
-                  [x_pos - 0.28, x_pos + 0.28],
+                  [x_pos - 0.27, x_pos + 0.27],
                   [lp, lp],
                   color="#333333",
                   linewidth=1.15,
@@ -361,23 +393,22 @@ def draw_key_triads_staff(key_labels):
               )
         elif note_y >= 78.5:
           for lp in ledger_above:
-            if note_y >= lp - 1.2:
+            if note_y >= lp - 1.1:
               ax.plot(
-                  [x_pos - 0.28, x_pos + 0.28],
+                  [x_pos - 0.27, x_pos + 0.27],
                   [lp, lp],
                   color="#333333",
                   linewidth=1.15,
                   zorder=1,
               )
 
-        # 줄과 줄 사이를 꽉 채우고 상하 음표가 붙도록 온음표 타원 확대
         ell = Ellipse(
             (x_pos, note_y),
-            width=0.38,
-            height=3.15,
+            width=0.36,
+            height=2.45,
             facecolor="none",
             edgecolor="#1f2937",
-            linewidth=1.9,
+            linewidth=1.8,
             zorder=3,
         )
         ax.add_patch(ell)
@@ -385,34 +416,31 @@ def draw_key_triads_staff(key_labels):
       roman, func_label = degree_meta[deg_idx]
       ax.text(
           x_pos,
-          55.5,
+          55.8,
           roman,
           fontsize=10.5,
           fontweight="bold",
           ha="center",
           va="top",
           color="#111827",
-          fontproperties=KR_FONT,
       )
       ax.text(
           x_pos,
-          51.5,
+          51.8,
           func_label,
           fontsize=8.3,
           ha="center",
           va="top",
           color="#374151",
-          fontproperties=KR_FONT,
       )
 
-    mode_kor = "장조 (Major)" if is_major else "단조 · 화성단음계 (Minor)"
+    mode_en = "Major" if is_major else "Minor (Harmonic)"
     ax.set_title(
-        f"{k_label}  —  {mode_kor}  (7음계 음 위 다이아토닉 3화음)",
+        f"{k_label}  —  {mode_en}  (7-Scale Diatonic Triads)",
         fontsize=11,
         fontweight="bold",
         loc="left",
         pad=10,
-        fontproperties=KR_FONT,
     )
     ax.set_xlim(0.1, 7.9)
     ax.set_ylim(43.0, 85.0)
