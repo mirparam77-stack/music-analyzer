@@ -1,6 +1,7 @@
 from datetime import datetime
 import json
 import os
+import re
 import tempfile
 from matplotlib import font_manager
 from matplotlib.patches import Ellipse
@@ -304,7 +305,6 @@ def draw_key_triads_staff(key_labels):
     is_major = k_obj.mode == "major"
     scale_pitches = get_scale_7_pitches(k_obj, is_major)
 
-    # 오선 5선 그리기
     for sl in staff_lines:
       ax.plot(
           [0.4, 7.6],
@@ -331,7 +331,6 @@ def draw_key_triads_staff(key_labels):
       x_pos = 1.3 + deg_idx * 0.9
       root_p = scale_pitches[deg_idx]
 
-      # 도·레·미·파·솔·라·시 각 음 위에 3음씩 쌓기 (1도, 3도, 5도)
       p1_m = root_p.midi
       p2_m = scale_pitches[(deg_idx + 2) % 7].midi + (
           12 if deg_idx + 2 >= 7 else 0
@@ -534,13 +533,16 @@ def analyze_vertical_and_modulations(score, global_key):
 
   return pd.DataFrame(rows), modulations, detected_keys
 
+
 # ==========================================
 # 6. 프레이징 근거 추출 및 컬러 매핑 시각화
 # ==========================================
 def extract_phrases_with_reasons(score, df_vert, total_m):
   if total_m <= 0:
     return []
-  parts = separate_voices(score)
+  parts = (
+      score.parts if len(score.parts) > 0 else score.voicesToParts().parts
+  )
   top_p = parts[0] if parts else None
 
   boundaries = {}
@@ -596,84 +598,56 @@ def extract_phrases_with_reasons(score, df_vert, total_m):
   return phrases
 
 
-def get_color_mapping(global_key, df_horiz):
-  avg_midi = df_horiz["MIDI"].mean() if not df_horiz.empty else 62
+def get_color_mapping(global_key):
   is_major = global_key.mode == "major"
   if is_major:
-    bg = "#FFFDF5" if avg_midi >= 64 else "#F7FBF2"
+    bg = "#FFFDF5"
     accent = "#F4A261"
-    v_cols = ["#E76F51", "#2A9D8F", "#457B9D", "#9B5DE5"]
     mood = f"밝고 명료한 장조 ({global_key.name})"
   else:
-    bg = "#F4F5FB" if avg_midi >= 64 else "#EEF2F6"
+    bg = "#F4F5FB"
     accent = "#5C6BC0"
-    v_cols = ["#5E60CE", "#0096C7", "#C9184A", "#2B9348"]
     mood = f"차분하고 서정적인 단조 ({global_key.name})"
-  return {"mood": mood, "bg": bg, "accent": accent, "voice_colors": v_cols}
+  return {"mood": mood, "bg": bg, "accent": accent}
 
 
-def draw_color_map_chart(df_horiz, phrases, cmap):
-  fig, ax = plt.subplots(figsize=(11.8, 4.8))
+def draw_phrase_timeline_chart(phrases, total_m, cmap):
+  fig, ax = plt.subplots(figsize=(11.5, 2.8))
   fig.patch.set_facecolor(cmap["bg"])
   ax.set_facecolor(cmap["bg"])
 
-  for i, v in enumerate(df_horiz["성부"].unique()):
-    sub = df_horiz[df_horiz["성부"] == v]
-    ax.plot(
-        sub.index,
-        sub["MIDI"],
-        marker="o",
-        markersize=3.5,
-        linewidth=1.8,
-        label=v,
-        color=cmap["voice_colors"][i % len(cmap["voice_colors"])],
-        alpha=0.9,
-    )
-
-  max_idx = int(df_horiz.index.max()) if not df_horiz.empty else 10
-  y_hi = df_horiz["MIDI"].max() + 5.5 if not df_horiz.empty else 82
-  y_lo = df_horiz["MIDI"].min() - 3.5 if not df_horiz.empty else 38
-  ax.set_xlim(-5, max_idx + 18)
-  ax.set_ylim(y_lo, y_hi)
+  max_m = max(total_m, 1)
+  ax.set_xlim(0.5, max_m + 0.5)
+  ax.set_ylim(0, 10)
 
   for idx, p in enumerate(phrases):
-    p_sub = df_horiz[
-        (df_horiz["마디"] >= p["시작"]) & (df_horiz["마디"] <= p["끝"])
-    ]
-    if not p_sub.empty:
-      x0, x1 = p_sub.index.min(), p_sub.index.max()
-      if idx % 2 == 1:
-        ax.axvspan(x0, x1, color=cmap["accent"], alpha=0.10)
-      ax.axvline(x=x1, color="#444444", linestyle="--", linewidth=1, alpha=0.6)
-      y_pos = y_hi - 0.7 if idx % 2 == 0 else y_hi - 2.6
-      x_mid = min((x0 + x1) / 2, max_idx - 8)
-      ax.text(
-          x_mid,
-          y_pos,
-          f"P{idx+1}({p['시작']}-{p['끝']})",
-          ha="center",
-          va="top",
-          fontsize=7.8,
-          fontweight="bold",
-          color="#222222",
-          fontproperties=KR_FONT,
-      )
+    x0, x1 = p.get("시작", 1), p.get("끝", max_m)
+    if idx % 2 == 1:
+      ax.axvspan(x0 - 0.4, x1 + 0.4, color=cmap["accent"], alpha=0.14)
+    ax.axvline(
+        x=x1 + 0.4, color="#444444", linestyle="--", linewidth=1, alpha=0.6
+    )
+    ax.text(
+        (x0 + x1) / 2,
+        5.0,
+        f"{p.get('이름', f'Phrase {idx+1}')}\n({x0}~{x1}마디)",
+        ha="center",
+        va="center",
+        fontsize=9,
+        fontweight="bold",
+        color="#222222",
+        fontproperties=KR_FONT,
+    )
 
   ax.set_title(
-      f"컬러 매핑: 성부 흐름 및 프레이즈 구간 | {cmap['mood']}",
+      f"프레이즈 구간 흐름 | {cmap['mood']}",
       fontsize=10.5,
+      loc="left",
       fontproperties=KR_FONT,
   )
-  ax.set_xlabel("진행 이벤트", fontproperties=KR_FONT)
-  ax.set_ylabel("MIDI 음고", fontproperties=KR_FONT)
-  ax.grid(True, linestyle=":", alpha=0.45)
-  ax.legend(
-      loc="lower right",
-      frameon=True,
-      facecolor="white",
-      fontsize=8.5,
-      prop=KR_FONT,
-  )
+  ax.set_xlabel("마디 (Measure)", fontproperties=KR_FONT)
+  ax.set_yticks([])
+  ax.grid(True, axis="x", linestyle=":", alpha=0.45)
   plt.tight_layout()
   return fig
 
@@ -700,14 +674,14 @@ def make_midi_audio(score_obj, start_m=None, end_m=None):
 # ==========================================
 st.title("🎼 악곡분석 콘솔 v3.0")
 st.caption(
-    "수평(대위법) · 수직(화성) 독립 분석 / 프레이징 근거 및 편집 / 컬러 매핑 /"
-    " MIDI 구간 청취"
+    "수직(화성 · 전조) 구조 분석 / 프레이징 근거 및 편집 / 컬러 매핑 / MIDI"
+    " 구간 청취"
 )
 
 db = load_db()
 
 # ==========================================
-# 8. 사이드바 (파일 업로드, 116마디 등 오류 체크/보정, 보관 곡 삭제 및 요약)
+# 8. 사이드바 (파일 업로드, 마디 체크/보정, 보관 곡 삭제)
 # ==========================================
 with st.sidebar:
   st.header("📂 악보 로드 및 마디 설정")
@@ -751,27 +725,14 @@ with st.sidebar:
     if song_labels:
       picked_song = st.selectbox("보관 곡 선택", song_labels, index=0)
       picked_idx = song_labels.index(picked_song)
-      picked_data = history_list[picked_idx] if picked_idx < len(history_list) else {}
+      picked_data = (
+          history_list[picked_idx] if picked_idx < len(history_list) else {}
+      )
 
-      col_del1, col_del2 = st.columns(2)
-      with col_del1:
-        if st.button("🗑️ 선택 곡 삭제", use_container_width=True):
-          if delete_song(picked_song):
-            st.success(f"'{picked_song}' 삭제 완료")
-            st.rerun()
-      with col_del2:
-        st.write("")
-
-      if isinstance(picked_data, dict):
-        st.write(f"**항목 키:** `{picked_song}`")
-        if "title" in picked_data:
-          st.write(f"**곡명:** {picked_data.get('title')}")
-        if "composer" in picked_data:
-          st.write(f"**작곡가:** {picked_data.get('composer')}")
-        if "era" in picked_data:
-          st.write(f"**시대:** {picked_data.get('era')}")
-        if "total_measures" in picked_data:
-          st.write(f"**마디 수:** {picked_data.get('total_measures')}")
+      if st.button("🗑️ 선택 곡 삭제", use_container_width=True):
+        if delete_song(picked_song):
+          st.success(f"'{picked_song}' 삭제 완료")
+          st.rerun()
   else:
     st.caption("보관된 곡이 없습니다.")
 
@@ -791,6 +752,8 @@ m_info = {
 cmap = {"bg": "#f4f6f9", "accent": "#4a6fa5", "mood": "기본 분석 모드"}
 modulations = []
 detected_keys = []
+df_v = pd.DataFrame()
+global_key = None
 phrase_state_key = "v3_phrases_default"
 
 if uploaded_file is not None:
@@ -825,7 +788,7 @@ elif isinstance(picked_data, dict) and picked_data:
       "cmap",
       {
           "bg": "#f4f6f9",
-          "border": "#4a6fa5",
+          "accent": "#4a6fa5",
           "mood": picked_data.get("mood", "저장된 분석 데이터"),
       },
   )
@@ -857,11 +820,10 @@ if score is not None:
     )
 
   global_key = score.analyze("key")
-  df_h = analyze_horizontal(score)
   df_v, modulations, detected_keys = analyze_vertical_and_modulations(
       score, global_key
   )
-  cmap = get_color_mapping(global_key, df_h)
+  cmap = get_color_mapping(global_key)
 
   phrase_state_key = f"v3_phrases_{source_title}"
   if phrase_state_key not in st.session_state:
@@ -886,62 +848,44 @@ if score is not None or (isinstance(picked_data, dict) and picked_data):
           <strong>🏛️ 활동 시대:</strong> 고전주의 &nbsp;|&nbsp;
           <strong>🎹 조성/분위기:</strong> {cmap['mood']}<br>
           <strong>📏 마디 수:</strong> {total_m}마디 (원본 {m_info['raw_measures']}마디, 보정 {manual_offset:+d}) &nbsp;|&nbsp;
-          <strong>🎭 분리 성부:</strong> {len(m_info['parts'])}개 &nbsp;|&nbsp;
           <strong>✂️ 프레이즈:</strong> {len(st.session_state[phrase_state_key])}개
       </div>
       """,
       unsafe_allow_html=True,
   )
 
-# 조성/전조 감지 흐름 + 관련 조성 7화음 오선 악보 + 장/단조 기능 박스
+# 조성/전조 감지 흐름 + 관련 조성 3화음 오선 악보 + 장/단조 기능 박스
 if score is not None or (isinstance(picked_data, dict) and picked_data):
   st.subheader("🎹 조성 및 전조 감지 흐름")
   fallback_key = (
       picked_data.get("key")
       if isinstance(picked_data, dict) and picked_data.get("key")
-      else globals().get("base_key_label", "C major")
+      else "C major"
   )
-  key_text = global_key.name if score is not None else fallback_key
+  key_text = global_key.name if global_key is not None else fallback_key
   st.write(f"- **기준 조성:** {key_text}")
 
   related_keys = []
-  if key_text and key_text != "저장된 분석 기준":
+  if key_text:
     related_keys.append(key_text)
 
+  key_pattern = re.compile(
+      r"\b([A-G](?:#|b|-)?\s+(?:major|minor))\b", re.IGNORECASE
+  )
   if modulations:
     for mod in modulations[:12]:
       st.write(f"- {mod}")
-      mod_str = str(mod)
-      for token in mod_str.replace("→", " ").replace("->", " ").split():
-        clean_tok = token.strip(",:;()")
-        if clean_tok.lower() in {
-            "major",
-            "minor",
-            "c",
-            "d",
-            "e",
-            "f",
-            "g",
-            "a",
-            "b",
-            "c#",
-            "d#",
-            "f#",
-            "g#",
-            "db",
-            "eb",
-            "gb",
-            "ab",
-            "bb",
-        }:
-          if clean_tok not in related_keys:
-            related_keys.append(clean_tok)
+      for match in key_pattern.findall(str(mod)):
+        parts = match.strip().split()
+        norm_key = f"{parts[0]} {parts[1].lower()}"
+        if norm_key not in related_keys:
+          related_keys.append(norm_key)
   else:
     st.write("- 단일 조성 중심 진행 (큰 폭의 전조 변화 미감지)")
 
   if score is not None and detected_keys:
     for dk in detected_keys[:8]:
-      dk_name = getattr(dk, "name", str(dk))
+      dk_name = getattr(dk, "name", str(dk)).strip()
       if dk_name and dk_name not in related_keys:
         related_keys.append(dk_name)
 
@@ -957,30 +901,25 @@ if score is not None or (isinstance(picked_data, dict) and picked_data):
     render_major_minor_function_box()
 
 if score is not None:
-  t1, t2, t3, t4, t5 = st.tabs([
+  t1, t2, t3 = st.tabs([
       "📊 통합 대시보드",
-      "⚖️ 대위법 · 화성 상세",
-      "✂️ 프레이징 근거 · 편집",
-      "🎨 컬러 매핑 시각화",
+      "🎼 수직 화성 상세",
       "🎧 MIDI 구간 재생기",
   ])
 
   with t1:
-    st.subheader("1. 컬러 매핑 및 성분 흐름")
-    if not df_h.empty:
+    st.subheader("1. 프레이즈 구간 컬러 흐름")
+    if st.session_state[phrase_state_key]:
       st.pyplot(
-          draw_color_map_chart(df_h, st.session_state[phrase_state_key], cmap)
+          draw_phrase_timeline_chart(
+              st.session_state[phrase_state_key], total_m, cmap
+          )
       )
 
-    c_left, c_right = st.columns(2)
-    with c_left:
-      st.subheader("2. 수평 대위법 & 다성부 분리")
-      st.dataframe(df_h, use_container_width=True, height=300)
-    with c_right:
-      st.subheader("3. 수직 화성 및 로마숫자 기능 표")
-      st.dataframe(df_v, use_container_width=True, height=300)
+    st.subheader("2. 수직 화성 및 로마숫자 기능 표")
+    st.dataframe(df_v, use_container_width=True, height=320)
 
-    st.subheader("4. 프레이징 구분 근거")
+    st.subheader("3. 프레이징 구분 근거")
     for p in st.session_state[phrase_state_key]:
       st.markdown(
           f"""
@@ -993,26 +932,29 @@ if score is not None:
       )
 
   with t2:
-    col_a, col_b = st.columns(2)
-    with col_a:
-      st.subheader("수평 대위법 (다성부 분리)")
-      v_list = ["전체"] + (
-          list(df_h["성부"].unique()) if not df_h.empty else []
+    st.subheader("수직 화성 및 로마숫자 상세 표")
+    st.dataframe(df_v, use_container_width=True)
+    if not df_v.empty:
+      st.download_button(
+          "📥 수직 화성 CSV 다운로드",
+          data=df_v.to_csv(index=False).encode("utf-8-sig"),
+          file_name=f"{source_title}_vertical_v3.csv",
+          mime="text/csv",
       )
-      sel_voice = st.selectbox("성부 선택", v_list, key="tab2_voice")
-      show_h = (
-          df_h
-          if sel_voice == "전체" or df_h.empty
-          else df_h[df_h["성부"] == sel_voice]
-      )
-      st.dataframe(show_h, use_container_width=True)
-    with col_b:
-      st.subheader("수직 화성 상세")
-      st.dataframe(df_v, use_container_width=True)
+
+  with t3:
+    st.subheader("MIDI 전체 및 프레이즈 구간 재생")
+    st.audio(make_midi_audio(score), format="audio/midi")
+    for p in st.session_state[phrase_state_key]:
+      if p["시작"] <= p["끝"] and total_m > 0:
+        st.caption(f"{p['이름']} ({p['시작']}~{p['끝']}마디)")
+        st.audio(
+            make_midi_audio(score, p["시작"], p["끝"]), format="audio/midi"
+        )
 elif isinstance(picked_data, dict) and picked_data:
   phrases_saved = st.session_state.get(phrase_state_key, [])
   if phrases_saved:
-    st.subheader("4. 프레이징 구분 근거")
+    st.subheader("프레이징 구분 근거")
     for p in phrases_saved:
       st.markdown(
           f"""
