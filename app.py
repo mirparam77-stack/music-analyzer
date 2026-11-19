@@ -3,6 +3,7 @@ import json
 import os
 import tempfile
 from matplotlib import font_manager
+from matplotlib.patches import Ellipse
 import matplotlib.pyplot as plt
 from music21 import chord, converter, interval, key, midi, note, pitch, roman, stream
 import pandas as pd
@@ -17,25 +18,44 @@ st.set_page_config(
 
 
 # ==========================================
-# 0. 한글 폰트 설정 (로컬 Windows + Streamlit Linux 클라우드 호환)
+# 0. 한글 폰트 탐색 및 FontProperties 반환
 # ==========================================
-def configure_korean_font():
+def get_korean_font_prop():
+  font_paths = [
+      "C:/Windows/Fonts/malgun.ttf",
+      "C:/Windows/Fonts/NanumGothic.ttf",
+      "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+      "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+  ]
+  for fp in font_paths:
+    if os.path.exists(fp):
+      try:
+        font_manager.fontManager.addfont(fp)
+        prop = font_manager.FontProperties(fname=fp)
+        plt.rcParams["font.family"] = prop.get_name()
+        plt.rcParams["axes.unicode_minus"] = False
+        return prop
+      except Exception:
+        pass
+
   candidates = [
       "Malgun Gothic",
       "NanumGothic",
       "AppleGothic",
       "Noto Sans CJK KR",
-      "DejaVu Sans",
   ]
-  available = {f.name for f in font_manager.fontManager.ttflist}
+  available = {f.name: f.fname for f in font_manager.fontManager.ttflist}
   for name in candidates:
     if name in available:
       plt.rcParams["font.family"] = name
-      break
+      plt.rcParams["axes.unicode_minus"] = False
+      return font_manager.FontProperties(fname=available[name])
+
   plt.rcParams["axes.unicode_minus"] = False
+  return font_manager.FontProperties()
 
 
-configure_korean_font()
+KR_FONT = get_korean_font_prop()
 
 st.markdown(
     """
@@ -140,64 +160,67 @@ def format_traditional_roman(ch, rn, global_key):
   has_sharp4 = any("#" in p.name for p in ch.pitches)
   if has_b6 and has_sharp4 and len(ch.pitches) >= 3:
     if len(ch.pitches) == 3:
-      return "It.6", "Augmented Sixth (It.6)"
+      return "It.6", "증6화음 (It.6)"
     elif any(
         iv.semitones == 6
         for i, p1 in enumerate(ch.pitches)
         for p2 in ch.pitches[i + 1 :]
         for iv in [interval.Interval(p1, p2)]
     ):
-      return "Gr.6", "Augmented Sixth (Gr.6)"
+      return "Gr.6", "증6화음 (Gr.6)"
     else:
-      return "Fr.6", "Augmented Sixth (Fr.6)"
+      return "Fr.6", "증6화음 (Fr.6)"
 
   if rn is None:
-    return "경과/비화성", "Non-Harmonic"
+    return "경과/비화성", "비화성음 / 경과 진행"
 
   base_rn = rn.romanNumeralAlone or ""
   fig = rn.figure or base_rn
+  common_l = (rn.commonName or "").lower()
 
-  if "diminished seventh" in rn.commonName.lower() or base_rn.startswith("vii°"):
-    root_sym = (
-        "vii°7"
-        if "7" in fig or len(ch.pitches) >= 4
-        else ("vii°6" if ch.inversion() == 1 else "vii°")
-    )
-    if ch.inversion() == 1 and len(ch.pitches) >= 4:
-      root_sym = "vii°6/5"
-    elif ch.inversion() == 2 and len(ch.pitches) >= 4:
-      root_sym = "vii°4/3"
-    elif ch.inversion() == 3 and len(ch.pitches) >= 4:
-      root_sym = "vii°4/2"
-    return root_sym, "Leading-Tone Diminished"
+  # 기능 한글+영문 병기
+  if base_rn.upper().startswith("I") and len(base_rn.replace("b", "").replace("#", "")) <= 3:
+    func_kr = "으뜸화음 (Tonic)"
+  elif base_rn.startswith("V"):
+    func_kr = "딸림화음 (Dominant)"
+  elif base_rn.lower().startswith("iv") or base_rn.lower().startswith("ii"):
+    func_kr = "버금딸림 영역 (Subdominant)"
+  elif "vii" in base_rn.lower():
+    func_kr = "이끈음 화성 (Leading-Tone)"
+  else:
+    func_kr = "화성 진행 (Harmonic)"
 
-  if "half-diminished" in rn.commonName.lower() or "ø" in fig:
+  if "diminished seventh" in common_l or base_rn.startswith("vii°"):
     inv = ch.inversion()
-    suffix = (
-        "ø7"
-        if inv == 0
-        else ("ø6/5" if inv == 1 else ("ø4/3" if inv == 2 else "ø4/2"))
-    )
+    if len(ch.pitches) >= 4:
+      sym = {0: "vii°7", 1: "vii°6/5", 2: "vii°4/3", 3: "vii°4/2"}.get(inv, "vii°7")
+    else:
+      sym = "vii°6" if inv == 1 else "vii°"
+    return sym, f"감7/감화음 · {func_kr}"
+
+  if "half-diminished" in common_l or "ø" in fig:
+    inv = ch.inversion()
+    suffix = {0: "ø7", 1: "ø6/5", 2: "ø4/3", 3: "ø4/2"}.get(inv, "ø7")
     clean_base = base_rn.replace("ø", "").replace("7", "")
-    return f"{clean_base}{suffix}", "Half-Diminished Seventh"
+    return f"{clean_base}{suffix}", f"반감7화음 · {func_kr}"
 
   if rn.isSeventh():
     inv = ch.inversion()
     clean_base = base_rn.replace("7", "")
     inv_map = {0: "7", 1: "6/5", 2: "4/3", 3: "4/2"}
-    return f"{clean_base}{inv_map.get(inv, '7')}", "Seventh Chord"
+    return f"{clean_base}{inv_map.get(inv, '7')}", f"7화음 · {func_kr}"
 
   inv = ch.inversion()
   if inv == 1:
-    return f"{base_rn}6", "First Inversion (6)"
+    return f"{base_rn}6", f"1전위 (6화음) · {func_kr}"
   elif inv == 2:
-    return f"{base_rn}6/4", "Second Inversion (6/4)"
+    return f"{base_rn}6/4", f"2전위 (6-4화음) · {func_kr}"
   else:
-    return base_rn if base_rn else fig, "Root Position"
+    return (base_rn if base_rn else fig), f"기본위치 · {func_kr}"
 
 
 # ==========================================
-# 3. 조성별 3화음 오선 악보 시각화 생성기
+# 3. 조성별 온음표 3화음 오선 악보 시각화 생성기
 # ==========================================
 def parse_key_safe(key_label):
   try:
@@ -212,7 +235,7 @@ def parse_key_safe(key_label):
 
 
 def draw_key_triads_staff(key_labels):
-  """기본 조성 및 감지된 조성들의 으뜸 3화음(I / i)을 오선 악보 형태로 시각화합니다."""
+  """조성별 온음표(타원) 3화음을 5선 오선 악보 위에 선명하게 그립니다."""
   unique_keys = []
   for k in key_labels:
     if k and k not in unique_keys:
@@ -224,11 +247,12 @@ def draw_key_triads_staff(key_labels):
   n_rows = (len(unique_keys) + n_cols - 1) // n_cols
 
   fig, axes = plt.subplots(
-      n_rows, n_cols, figsize=(4.2 * n_cols, 2.8 * n_rows), squeeze=False
+      n_rows, n_cols, figsize=(4.5 * n_cols, 3.1 * n_rows), squeeze=False
   )
   fig.patch.set_facecolor("#FFFFFF")
 
-  staff_lines = [64, 67, 71, 74, 77]  # 높은음자리표 오선 기준 MIDI 참고선(E4, G4, B4, D5, F5)
+  # 높은음자리표 5선 MIDI 값: E4(64), G4(67), B4(71), D5(74), F5(77)
+  staff_lines = [64, 67, 71, 74, 77]
 
   for idx, k_label in enumerate(unique_keys):
     r_i, c_i = divmod(idx, n_cols)
@@ -240,60 +264,76 @@ def draw_key_triads_staff(key_labels):
     third_semi = 4 if k_obj.mode == "major" else 3
     fifth_semi = 7
 
+    # 오선 범위(60~81) 안에 들어오도록 옥타브 조정
     p1 = pitch.Pitch(tonic.name + "4")
+    if p1.midi > 74:
+      p1 = pitch.Pitch(tonic.name + "3")
     p2 = p1.transpose(third_semi)
     p3 = p1.transpose(fifth_semi)
 
     # 5선 그리기
     for sl in staff_lines:
-      ax.axhline(sl, color="#444444", linewidth=0.9, alpha=0.8)
+      ax.plot([0.2, 2.2], [sl, sl], color="#333333", linewidth=1.0, alpha=0.85)
 
-    # 온음표(타원) 3화음 표시
-    triad_notes = [
+    # 온음표(타원) 3화음 및 구성음 라벨
+    triad_items = [
         (p1, "근음", "#1D4ED8"),
         (p2, "3음", "#0D9488"),
         (p3, "5음", "#D97706"),
     ]
-    for p_item, role_txt, col_txt in triad_notes:
+    for p_item, role_txt, col_txt in triad_items:
       m_val = p_item.midi
-      # 덧줄 표시
-      if m_val <= 60:
-        ax.plot([0.7, 1.3], [60, 60], color="#444444", linewidth=1.0)
+      # C4(60) 덧줄
+      if m_val == 60:
+        ax.plot([0.85, 1.35], [60, 60], color="#333333", linewidth=1.1)
+      # A5(81) 덧줄
       if m_val >= 81:
-        ax.plot([0.7, 1.3], [81, 81], color="#444444", linewidth=1.0)
+        ax.plot([0.85, 1.35], [81, 81], color="#333333", linewidth=1.1)
 
-      circle = plt.Circle(
-          (1.0, m_val),
-          radius=0.85,
-          facecolor="white",
+      # 정통 온음표 모양(속이 빈 타원)
+      ell = Ellipse(
+          (1.1, m_val),
+          width=0.38,
+          height=1.55,
+          facecolor="#FFFFFF",
           edgecolor=col_txt,
           linewidth=2.0,
           zorder=4,
       )
-      ax.add_patch(circle)
-      ax.text(
-          1.35,
-          m_val,
-          f"{p_item.nameWithOctave} ({role_txt})",
-          va="center",
-          fontsize=8.5,
-          color="#222222",
-      )
+      ax.add_patch(ell)
 
+    # 우측에 3화음 구성음 요약 텍스트 표시
     chord_sym = "I" if k_obj.mode == "major" else "i"
+    info_lines = [
+        f"{chord_sym} 3화음 ({p1.name}-{p2.name}-{p3.name})",
+        f"근음: {p1.nameWithOctave}",
+        f"3음: {p2.nameWithOctave}",
+        f"5음: {p3.nameWithOctave}",
+    ]
+    ax.text(
+        2.32,
+        70.5,
+        "\n".join(info_lines),
+        va="center",
+        ha="left",
+        fontsize=8.3,
+        color="#222222",
+        fontproperties=KR_FONT,
+    )
+
     ax.set_title(
-        f"{k_label} [{chord_sym}: {p1.name}-{p2.name}-{p3.name}]",
+        f"{k_label} 온음표 3화음",
         fontsize=9.5,
         fontweight="bold",
+        fontproperties=KR_FONT,
     )
-    ax.set_xlim(0.2, 2.8)
-    ax.set_ylim(58, 83)
+    ax.set_xlim(0.0, 4.3)
+    ax.set_ylim(58.0, 83.0)
     ax.set_xticks([])
     ax.set_yticks([])
     for sp in ax.spines.values():
       sp.set_visible(False)
 
-  # 남는 서브플롯 숨김
   for idx in range(len(unique_keys), n_rows * n_cols):
     r_i, c_i = divmod(idx, n_cols)
     axes[r_i][c_i].axis("off")
@@ -541,7 +581,7 @@ def get_color_mapping(global_key, df_horiz):
 
 
 def draw_color_map_chart(df_horiz, phrases, cmap):
-  fig, ax = plt.subplots(figsize=(11.5, 4.6))
+  fig, ax = plt.subplots(figsize=(11.8, 4.8))
   fig.patch.set_facecolor(cmap["bg"])
   ax.set_facecolor(cmap["bg"])
 
@@ -558,8 +598,10 @@ def draw_color_map_chart(df_horiz, phrases, cmap):
         alpha=0.9,
     )
 
-  y_hi = df_horiz["MIDI"].max() + 4.5 if not df_horiz.empty else 82
+  max_idx = int(df_horiz.index.max()) if not df_horiz.empty else 10
+  y_hi = df_horiz["MIDI"].max() + 5.5 if not df_horiz.empty else 82
   y_lo = df_horiz["MIDI"].min() - 3.5 if not df_horiz.empty else 38
+  ax.set_xlim(-5, max_idx + 18)
   ax.set_ylim(y_lo, y_hi)
 
   for idx, p in enumerate(phrases):
@@ -571,10 +613,10 @@ def draw_color_map_chart(df_horiz, phrases, cmap):
       if idx % 2 == 1:
         ax.axvspan(x0, x1, color=cmap["accent"], alpha=0.10)
       ax.axvline(x=x1, color="#444444", linestyle="--", linewidth=1, alpha=0.6)
-      # 라벨 겹침 방지를 위한 높이 교차 배치
-      y_pos = y_hi - 0.8 if idx % 2 == 0 else y_hi - 2.6
+      y_pos = y_hi - 0.7 if idx % 2 == 0 else y_hi - 2.6
+      x_mid = min((x0 + x1) / 2, max_idx - 8)
       ax.text(
-          (x0 + x1) / 2,
+          x_mid,
           y_pos,
           f"P{idx+1}({p['시작']}-{p['끝']})",
           ha="center",
@@ -582,15 +624,20 @@ def draw_color_map_chart(df_horiz, phrases, cmap):
           fontsize=7.8,
           fontweight="bold",
           color="#222222",
+          fontproperties=KR_FONT,
       )
 
   ax.set_title(
-      f"컬러 매핑: 성부 흐름 및 프레이즈 구간 | {cmap['mood']}", fontsize=10.5
+      f"컬러 매핑: 성부 흐름 및 프레이즈 구간 | {cmap['mood']}",
+      fontsize=10.5,
+      fontproperties=KR_FONT,
   )
-  ax.set_xlabel("진행 이벤트")
-  ax.set_ylabel("MIDI 음고")
+  ax.set_xlabel("진행 이벤트", fontproperties=KR_FONT)
+  ax.set_ylabel("MIDI 음고", fontproperties=KR_FONT)
   ax.grid(True, linestyle=":", alpha=0.45)
-  ax.legend(loc="lower right", frameon=True, facecolor="white", fontsize=8.5)
+  ax.legend(
+      loc="lower right", frameon=True, facecolor="white", fontsize=8.5, prop=KR_FONT
+  )
   plt.tight_layout()
   return fig
 
@@ -719,7 +766,11 @@ if score is not None:
 
   phrase_state_key = f"v3_phrases_{source_title}"
   if phrase_state_key not in st.session_state:
-    if source_title in db and isinstance(db[source_title], dict) and "phrases" in db[source_title]:
+    if (
+        source_title in db
+        and isinstance(db[source_title], dict)
+        and "phrases" in db[source_title]
+    ):
       st.session_state[phrase_state_key] = db[source_title]["phrases"]
     else:
       st.session_state[phrase_state_key] = extract_phrases_with_reasons(
@@ -741,7 +792,7 @@ if score is not None:
       unsafe_allow_html=True,
   )
 
-  # 조성/전조 감지 흐름 + 조성별 3화음 오선 악보
+  # 조성/전조 감지 흐름 + 조성별 온음표 3화음 오선 악보
   st.subheader("🎹 조성 및 전조 감지 흐름")
   st.write(f"- **기준 조성:** {global_key.name}")
   if modulations:
@@ -774,7 +825,7 @@ if score is not None:
       st.subheader("2. 수평 대위법 & 다성부 분리")
       st.dataframe(df_h, use_container_width=True, height=300)
     with c_right:
-      st.subheader("3. 수직 화성 상세 분석 표")
+      st.subheader("3. 수직 화성 및 로마숫자 기능 표")
       st.dataframe(df_v, use_container_width=True, height=300)
 
     st.subheader("4. 프레이징 구분 근거")
@@ -840,7 +891,7 @@ if score is not None:
       )
       st.dataframe(show_h, use_container_width=True)
     with col_b:
-      st.subheader("수직 화성 상세 분석 표")
+      st.subheader("수직 화성 및 로마숫자 기능 표")
       st.dataframe(df_v, use_container_width=True)
 
   # [탭 3] 프레이징 근거 및 사용자 편집
@@ -898,3 +949,16 @@ if score is not None:
     st.markdown("**전체 곡**")
     st.audio(make_midi_audio(score), format="audio/midi")
     st.divider()
+    for p in st.session_state[phrase_state_key]:
+      st.markdown(f"**{p['이름']} ({p['시작']}~{p['끝']}마디)** — {p['근거']}")
+      if p["시작"] <= p["끝"] and total_m > 0:
+        st.audio(
+            make_midi_audio(score, p["시작"], p["끝"]), format="audio/midi"
+        )
+      else:
+        st.error("시작 마디가 끝 마디보다 클 수 없습니다.")
+
+else:
+  st.info(
+      "👈 왼쪽 사이드바에서 악보 파일을 업로드해 주세요. (활동 시대 기본값: **고전주의**)"
+  )
