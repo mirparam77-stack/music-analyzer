@@ -721,20 +721,20 @@ with st.sidebar:
        st.write("")
   picked_idx = song_labels.index(picked_song) if song_labels else 0
   picked_data = history_list[picked_idx] if history_list else {}
-  if isinstance(picked_data, dict):
-        st.write(f"**항목 키:** `{picked_song}`")
-        if "title" in picked_data:
-          st.write(f"**곡명:** {picked_data.get('title')}")
-        if "composer" in picked_data:
-          st.write(f"**작곡가:** {picked_data.get('composer')}")
-        if "era" in picked_data:
-          st.write(f"**시대:** {picked_data.get('era')}")
-        if "total_measures" in picked_data:
-          st.write(f"**마디 수:** {picked_data.get('total_measures')}")
-        elif isinstance(picked_data, list):
-          st.write(f"**보관 건수:** {len(picked_data)}건")
-  else:
-      st.caption("보관된 곡이 없습니다.")
+if isinstance(picked_data, dict):
+      st.write(f"**항목 키:** `{picked_song}`")
+      if "title" in picked_data:
+        st.write(f"**곡명:** {picked_data.get('title')}")
+      if "composer" in picked_data:
+        st.write(f"**작곡가:** {picked_data.get('composer')}")
+      if "era" in picked_data:
+        st.write(f"**시대:** {picked_data.get('era')}")
+      if "total_measures" in picked_data:
+        st.write(f"**마디 수:** {picked_data.get('total_measures')}")
+      elif isinstance(picked_data, list):
+        st.write(f"**보관 건수:** {len(picked_data)}건")
+else:
+    st.caption("보관된 곡이 없습니다.")
 
 # ==========================================
 # 9. 메인 대시보드 실행
