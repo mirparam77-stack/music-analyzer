@@ -261,7 +261,7 @@ def get_scale_7_pitches(k_obj, is_major):
 
 
 def _diatonic_triad_pitches(tonic_str, is_major):
-  """music21 음계로부터 1도~7도 다이아토닉 3화음(1음, 3음, 5음)을 구성하고, 교재처럼 오선 범위 안에 안정적으로 배치합니다."""
+  """music21 음계로부터 1도~7도 다이아토닉 3화음(1음, 3음, 5음)을 구성하고, 오선 범위 안에 안정적으로 배치합니다."""
   k_obj = parse_key_safe(f"{tonic_str} {'major' if is_major else 'minor'}")
   scale_p = get_scale_7_pitches(k_obj, is_major)
   triads = []
@@ -270,13 +270,11 @@ def _diatonic_triad_pitches(tonic_str, is_major):
     p3 = pitch.Pitch(scale_p[(idx + 2) % 7].nameWithOctave)
     p5 = pitch.Pitch(scale_p[(idx + 4) % 7].nameWithOctave)
 
-    # 화음 내부에서 3음과 5음이 근음보다 낮게 떨어지지 않도록 옥타브 정렬
     while p3.midi <= p1.midi:
       p3.octave += 1
     while p5.midi <= p3.midi:
       p5.octave += 1
 
-    # 화음 전체가 G5(80)를 크게 넘지 않도록 옥타브 조정
     while p5.midi > 80 and p1.midi >= 65:
       p1.octave -= 1
       p3.octave -= 1
@@ -287,36 +285,28 @@ def _diatonic_triad_pitches(tonic_str, is_major):
 
 
 def _pitch_to_svg_y(p_obj, top_line_y=44.0, line_gap=11.0):
-  """
-    높은음자리표 오선 좌표 변환:
-    - 위에서 1째 줄(F5, MIDI 77) = top_line_y
-    - 위에서 2째 줄(D5, MIDI 74) = top_line_y + 1 * line_gap
-    - 위에서 3째 줄(B4, MIDI 71) = top_line_y + 2 * line_gap
-    - 위에서 4째 줄(G4, MIDI 67) = top_line_y + 3 * line_gap
-    - 위에서 5째 줄(E4, MIDI 64) = top_line_y + 4 * line_gap
-    """
+  """높은음자리표 오선 좌표 변환 (G4 = 4째 줄 = top_line_y + 3*line_gap)."""
   staff_step_map = {
-      81: -2.0,  # A5 (위 둘째 덧줄)
-      79: -1.0,  # G5 (위 첫째 덧줄)
-      77: 0.0,  # F5 (1째 줄)
-      76: 0.5,  # E5 (1째 칸)
-      74: 1.0,  # D5 (2째 줄)
-      72: 1.5,  # C5 (2째 칸)
-      71: 2.0,  # B4 (3째 줄)
-      69: 2.5,  # A4 (3째 칸)
-      67: 3.0,  # G4 (4째 줄 - 높은음자리표 중심 G선)
-      65: 3.5,  # F4 (4째 칸)
-      64: 4.0,  # E4 (5째 줄)
-      62: 4.5,  # D4 (아래 첫째 칸)
-      60: 5.0,  # C4 (아래 첫째 덧줄)
-      59: 5.5,  # B3
-      57: 6.0,  # A3 (아래 둘째 덧줄)
+      81: -2.0,
+      79: -1.0,
+      77: 0.0,
+      76: 0.5,
+      74: 1.0,
+      72: 1.5,
+      71: 2.0,
+      69: 2.5,
+      67: 3.0,
+      65: 3.5,
+      64: 4.0,
+      62: 4.5,
+      60: 5.0,
+      59: 5.5,
+      57: 6.0,
   }
   midi_val = p_obj.midi
   if midi_val in staff_step_map:
     step = staff_step_map[midi_val]
   else:
-    # 반음(#/b)이 붙은 음은 자연음 기준 MIDI로 근사
     closest_midi = min(staff_step_map.keys(), key=lambda m: abs(m - midi_val))
     step = staff_step_map[closest_midi]
   return top_line_y + step * line_gap
@@ -324,15 +314,12 @@ def _pitch_to_svg_y(p_obj, top_line_y=44.0, line_gap=11.0):
 
 def _build_g_clef_svg(x_center=58.0, top_line_y=44.0, line_gap=11.0):
   """둘째 줄 G4(top_line_y + 3*line_gap)를 감아 도는 높은음자리표(G clef)를 그립니다."""
-  g4_y = top_line_y + 3 * line_gap  # 77.0 (높은음자리표가 감는 G선)
-  top_y = top_line_y - 12.0  # 32.0
-  bot_y = top_line_y + 4 * line_gap + 11.0  # 99.0
-
-  # G4 선을 감싸는 고리 중심과 반경
+  g4_y = top_line_y + 3 * line_gap
+  top_y = top_line_y - 12.0
+  bot_y = top_line_y + 4 * line_gap + 11.0
   cx = x_center
   return f"""
     <g>
-        <!-- G4 선을 감아 도는 아랫배 고리 -->
         <path d="M {cx} {g4_y + 3.5}
                  C {cx + 12} {g4_y + 3.5}, {cx + 13} {g4_y - 9.5}, {cx - 2} {g4_y - 11.5}
                  C {cx - 14} {g4_y - 13.0}, {cx - 15} {g4_y + 1.5}, {cx - 4} {g4_y + 6.5}
@@ -405,7 +392,6 @@ def draw_key_triads_staff(key_labels):
       for p_item in (p1, p3, p5):
         ny = _pitch_to_svg_y(p_item, top_line_y=top_y, line_gap=gap)
 
-        # 아래 덧줄 및 위 덧줄
         if ny >= bot_y + gap * 0.8:
           cur_ly = bot_y + gap
           while cur_ly <= ny + 1.5:
@@ -423,7 +409,6 @@ def draw_key_triads_staff(key_labels):
             )
             cur_ly -= gap
 
-        # 임시표(# / b)
         if "#" in p_item.name:
           notes_svg.append(
               f'<text x="{cx - 15}" y="{ny + 4}" font-size="13" font-weight="bold"'
@@ -435,13 +420,11 @@ def draw_key_triads_staff(key_labels):
               f' fill="#111" text-anchor="end">♭</text>'
           )
 
-        # 온음표(타원)
         notes_svg.append(
             f'<ellipse cx="{cx}" cy="{ny}" rx="8.0" ry="5.1" fill="#fff"'
             ' stroke="#111" stroke-width="2.0"/>'
         )
 
-      # 도수 라벨
       notes_svg.append(
           f'<text x="{cx}" y="{bot_y + 28}" font-size="13" font-weight="bold"'
           ' fill="#111" text-anchor="middle"'
@@ -952,54 +935,4 @@ if score is not None or (isinstance(picked_data, dict) and picked_data):
       expanded=True,
   ):
     st.write(f"**표시 조성 목록 (전조 포함):** {', '.join(related_keys)}")
-    draw_key_triads_staff(related_keys)
-    render_major_minor_function_box()
-
-if score is not None:
-  t1, t2, t3 = st.tabs([
-      "📊 통합 대시보드",
-      "🎼 수직 화성 상세",
-      "🎧 MIDI 구간 재생기",
-  ])
-
-  with t1:
-    st.subheader("1. 프레이즈 구간 컬러 흐름")
-    if st.session_state[phrase_state_key]:
-      st.pyplot(
-          draw_phrase_timeline_chart(
-              st.session_state[phrase_state_key], total_m, cmap
-          )
-      )
-
-    st.subheader("2. 수직 화성 및 로마숫자 기능 표")
-    st.dataframe(df_v, use_container_width=True, height=320)
-
-    st.subheader("3. 프레이징 구분 근거")
-    for p in st.session_state[phrase_state_key]:
-      st.markdown(
-          f"""
-          <div class="phrase-box">
-              <strong>{p.get('이름', '프레이즈')}</strong> (m.{p.get('시작', '?')} ~ m.{p.get('끝', '?')})<br>
-              <span>근거: {p.get('근거', '')}</span>
-          </div>
-          """,
-          unsafe_allow_html=True,
-      )
-
-  with t2:
-    st.subheader("수직 화성 및 로마숫자 상세 표")
-    st.dataframe(df_v, use_container_width=True)
-    if not df_v.empty:
-      st.download_button(
-          "📥 수직 화성 CSV 다운로드",
-          data=df_v.to_csv(index=False).encode("utf-8-sig"),
-          file_name=f"{source_title}_vertical_v3.csv",
-          mime="text/csv",
-      )
-
-  with t3:
-    st.subheader("MIDI 전체 및 프레이즈 구간 재생")
-    st.audio(make_midi_audio(score), format="audio/midi")
-    for p in st.session_state[phrase_state_key]:
-      if p["시작"] <= p["끝"] and total_m > 0:
-        st.caption(f"{p['이름']} ({
+    draw
