@@ -821,31 +821,37 @@ if score is not None:
           score, df_v, total_m
       )
 
-  # 상단 요약 카드 (활동 시대: 고전주의)
+# 상단 요약 카드 (활동 시대: 고전주의)
+if score is not None or (isinstance(picked_data, dict) and picked_data):
+  accent_color = cmap.get("accent", cmap.get("border", "#4a6fa5"))
   st.markdown(
       f"""
-        <div class="dash-card" style="background-color:{cmap['bg']}; border-left:6px solid {cmap['accent']};">
-            <strong>🎼 곡명:</strong> {source_title} &nbsp;|&nbsp;
-            <strong>🏛️ 활동 시대:</strong> 고전주의 &nbsp;|&nbsp;
-            <strong>🎹 조성/분위기:</strong> {cmap['mood']}<br>
-            <strong>📏 마디 수:</strong> {total_m}마디 (원본 {m_info['raw_measures']}마디, 보정 {manual_offset:+d}) &nbsp;|&nbsp;
-            <strong>🎭 분리 성부:</strong> {len(m_info['parts'])}개 &nbsp;|&nbsp;
-            <strong>✂️ 프레이즈:</strong> {len(st.session_state[phrase_state_key])}개
-        </div>
-        """,
+      <div class="dash-card" style="background-color:{cmap['bg']}; border-left:6px solid {accent_color};">
+          <strong>🎼 곡명:</strong> {source_title} &nbsp;|&nbsp;
+          <strong>🏛️ 활동 시대:</strong> 고전주의 &nbsp;|&nbsp;
+          <strong>🎹 조성/분위기:</strong> {cmap['mood']}<br>
+          <strong>📏 마디 수:</strong> {total_m}마디 (원본 {m_info['raw_measures']}마디, 보정 {manual_offset:+d}) &nbsp;|&nbsp;
+          <strong>🎭 분리 성부:</strong> {len(m_info['parts'])}개 &nbsp;|&nbsp;
+          <strong>✂️ 프레이즈:</strong> {len(st.session_state[phrase_state_key])}개
+      </div>
+      """,
       unsafe_allow_html=True,
   )
 
-  # 조성/전조 감지 흐름 + 조성별 온음표 3화음 오선 악보
+# 조성/전조 감지 흐름 + 조성별 음온표 3화음 오선 악보
+if score is not None or (isinstance(picked_data, dict) and picked_data):
   st.subheader("🎹 조성 및 전조 감지 흐름")
-  st.write(f"- **기준 조성:** {global_key.name}")
+  fallback_key = globals().get("base_key_label", "저장된 분석 기준")
+  key_text = global_key.name if score is not None else fallback_key
+  st.write(f"- **기준 조성:** {key_text}")
   if modulations:
     for mod in modulations[:12]:
       st.write(f"- {mod}")
   else:
     st.write("- 단일 조성 중심 진행 (큰 폭의 전조 변화 미감지)")
 
-  with st.expander("🎼 조성별 온음표 3화음 오선 악보 펼쳐보기/접기", expanded=True):
+if score is not None:
+  with st.expander("🎼 조성별 음온표 3화음 오선 악보 펼쳐보기/접기", expanded=True):
     st.pyplot(draw_key_triads_staff(detected_keys[:8]))
 
   t1, t2, t3, t4, t5 = st.tabs([
@@ -858,7 +864,7 @@ if score is not None:
 
   # [탭 1] 대시보드에서 핵심 요소가 모두 바로 보이도록 구성
   with t1:
-    st.subheader("1. 컬러 매핑 및 성부 흐름")
+    st.subheader("1. 컬러 매핑 및 성분 흐름")
     if not df_h.empty:
       st.pyplot(
           draw_color_map_chart(df_h, st.session_state[phrase_state_key], cmap)
@@ -876,25 +882,40 @@ if score is not None:
     for p in st.session_state[phrase_state_key]:
       st.markdown(
           f"""
-                <div class="phrase-box">
-                    <strong>{p['이름']}</strong> (m.{p['시작']} ~ m.{p['끝']})<br>
-                    <span>근거: {p['근거']}</span>
-                </div>
-                """,
+          <div class="phrase-box">
+              <strong>{p.get('이름', '프레이즈')}</strong> (m.{p.get('시작', '?')} ~ m.{p.get('끝', '?')})<br>
+              <span>근거: {p.get('근거', '')}</span>
+          </div>
+          """,
+          unsafe_allow_html=True,
+      )
+elif isinstance(picked_data, dict) and picked_data:
+  phrases_saved = st.session_state.get(phrase_state_key, [])
+  if phrases_saved:
+    st.subheader("4. 프레이징 구분 근거")
+    for p in phrases_saved:
+      st.markdown(
+          f"""
+          <div class="phrase-box">
+              <strong>{p.get('이름', '프레이즈')}</strong> (m.{p.get('시작', '?')} ~ m.{p.get('끝', '?')})<br>
+              <span>근거: {p.get('근거', '')}</span>
+          </div>
+          """,
           unsafe_allow_html=True,
       )
 
-    st.subheader("5. MIDI 전체 및 구간 재생")
-    st.audio(make_midi_audio(score), format="audio/midi")
-    for p in st.session_state[phrase_state_key]:
+if score is not None:
+  st.subheader("5. MIDI 전체 및 구간 재생")
+  st.audio(make_midi_audio(score), format="audio/midi")
+  for p in st.session_state[phrase_state_key]:
       if p["시작"] <= p["끝"] and total_m > 0:
         st.caption(f"{p['이름']} ({p['시작']}~{p['끝']}마디)")
         st.audio(
             make_midi_audio(score, p["시작"], p["끝"]), format="audio/midi"
         )
 
-    st.subheader("6. 연주 해석 체크리스트")
-    st.markdown(
+  st.subheader("6. 연주 해석 체크리스트")
+  st.markdown(
         """
         <div class="checklist-box">
             <strong>긴장과 해소:</strong> Dominant(V) 및 부속화음(V/V, vii° 등)에서 목표 화성으로 해결될 때의 호흡과 성부 진행을 살렸는가?
@@ -906,15 +927,15 @@ if score is not None:
         unsafe_allow_html=True,
     )
 
-    st.subheader("7. 분석 결과 저장 및 다운로드")
-    dl1, dl2 = st.columns(2)
-    dl1.download_button(
+  st.subheader("7. 분석 결과 저장 및 다운로드")
+  dl1, dl2 = st.columns(2)
+  dl1.download_button(
         "📥 수평 대위법 CSV 다운로드",
         data=df_h.to_csv(index=False).encode("utf-8-sig"),
         file_name=f"{source_title}_horizontal_v3.csv",
         mime="text/csv",
     )
-    dl2.download_button(
+  dl2.download_button(
         "📥 수직 화성 CSV 다운로드",
         data=df_v.to_csv(index=False).encode("utf-8-sig"),
         file_name=f"{source_title}_vertical_v3.csv",
