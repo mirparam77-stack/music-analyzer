@@ -227,7 +227,7 @@ def format_traditional_roman(ch, rn, global_key):
 
 
 # ==========================================
-# 3. 조성별 7음계 다이아토닉 3화음 SVG 오선 악보 및 장·단조 기능 대조표
+# 3. music21 기반 7음계 3화음 계산 + G선 기준 SVG 오선 악보
 # ==========================================
 def parse_key_safe(key_label):
   try:
@@ -261,45 +261,91 @@ def get_scale_7_pitches(k_obj, is_major):
 
 
 def _diatonic_triad_pitches(tonic_str, is_major):
-  """조성에 맞춰 1도~7도 다이아토닉 3화음(근음, 3음, 5음)을 반환합니다."""
+  """music21 음계로부터 1도~7도 다이아토닉 3화음(1음, 3음, 5음)을 구성하고, 교재처럼 오선 범위 안에 안정적으로 배치합니다."""
   k_obj = parse_key_safe(f"{tonic_str} {'major' if is_major else 'minor'}")
   scale_p = get_scale_7_pitches(k_obj, is_major)
   triads = []
   for idx in range(7):
-    p1 = scale_p[idx]
-    p3 = scale_p[(idx + 2) % 7]
-    p5 = scale_p[(idx + 4) % 7]
-    if p3.midi < p1.midi:
-      p3 = pitch.Pitch(p3.name)
-      p3.octave = p1.octave + 1
-    if p5.midi < p3.midi:
-      p5 = pitch.Pitch(p5.name)
-      p5.octave = p3.octave + 1
+    p1 = pitch.Pitch(scale_p[idx].nameWithOctave)
+    p3 = pitch.Pitch(scale_p[(idx + 2) % 7].nameWithOctave)
+    p5 = pitch.Pitch(scale_p[(idx + 4) % 7].nameWithOctave)
+
+    # 화음 내부에서 3음과 5음이 근음보다 낮게 떨어지지 않도록 옥타브 정렬
+    while p3.midi <= p1.midi:
+      p3.octave += 1
+    while p5.midi <= p3.midi:
+      p5.octave += 1
+
+    # 화음 전체가 G5(80)를 크게 넘지 않도록 옥타브 조정
+    while p5.midi > 80 and p1.midi >= 65:
+      p1.octave -= 1
+      p3.octave -= 1
+      p5.octave -= 1
+
     triads.append((p1, p3, p5))
   return triads
 
 
 def _pitch_to_svg_y(p_obj, top_line_y=44.0, line_gap=11.0):
-  """높은음자리표 기준 음높이를 SVG y좌표로 변환합니다."""
-  c4_midi = 60
-  diff_semis = p_obj.midi - c4_midi
-  oct_shift, rem = divmod(diff_semis, 12)
-  approx_step = oct_shift * 7 + {
-      0: 0,
-      1: 0,
-      2: 1,
-      3: 2,
-      4: 2,
-      5: 3,
-      6: 3,
-      7: 4,
-      8: 4,
-      9: 5,
-      10: 6,
-      11: 6,
-  }.get(rem, 0)
-  step_from_e4 = approx_step - 2
-  return (top_line_y + 4 * line_gap) - step_from_e4 * (0.5 * line_gap)
+  """
+    높은음자리표 오선 좌표 변환:
+    - 위에서 1째 줄(F5, MIDI 77) = top_line_y
+    - 위에서 2째 줄(D5, MIDI 74) = top_line_y + 1 * line_gap
+    - 위에서 3째 줄(B4, MIDI 71) = top_line_y + 2 * line_gap
+    - 위에서 4째 줄(G4, MIDI 67) = top_line_y + 3 * line_gap
+    - 위에서 5째 줄(E4, MIDI 64) = top_line_y + 4 * line_gap
+    """
+  staff_step_map = {
+      81: -2.0,  # A5 (위 둘째 덧줄)
+      79: -1.0,  # G5 (위 첫째 덧줄)
+      77: 0.0,  # F5 (1째 줄)
+      76: 0.5,  # E5 (1째 칸)
+      74: 1.0,  # D5 (2째 줄)
+      72: 1.5,  # C5 (2째 칸)
+      71: 2.0,  # B4 (3째 줄)
+      69: 2.5,  # A4 (3째 칸)
+      67: 3.0,  # G4 (4째 줄 - 높은음자리표 중심 G선)
+      65: 3.5,  # F4 (4째 칸)
+      64: 4.0,  # E4 (5째 줄)
+      62: 4.5,  # D4 (아래 첫째 칸)
+      60: 5.0,  # C4 (아래 첫째 덧줄)
+      59: 5.5,  # B3
+      57: 6.0,  # A3 (아래 둘째 덧줄)
+  }
+  midi_val = p_obj.midi
+  if midi_val in staff_step_map:
+    step = staff_step_map[midi_val]
+  else:
+    # 반음(#/b)이 붙은 음은 자연음 기준 MIDI로 근사
+    closest_midi = min(staff_step_map.keys(), key=lambda m: abs(m - midi_val))
+    step = staff_step_map[closest_midi]
+  return top_line_y + step * line_gap
+
+
+def _build_g_clef_svg(x_center=58.0, top_line_y=44.0, line_gap=11.0):
+  """둘째 줄 G4(top_line_y + 3*line_gap)를 감아 도는 높은음자리표(G clef)를 그립니다."""
+  g4_y = top_line_y + 3 * line_gap  # 77.0 (높은음자리표가 감는 G선)
+  top_y = top_line_y - 12.0  # 32.0
+  bot_y = top_line_y + 4 * line_gap + 11.0  # 99.0
+
+  # G4 선을 감싸는 고리 중심과 반경
+  cx = x_center
+  return f"""
+    <g>
+        <!-- G4 선을 감아 도는 아랫배 고리 -->
+        <path d="M {cx} {g4_y + 3.5}
+                 C {cx + 12} {g4_y + 3.5}, {cx + 13} {g4_y - 9.5}, {cx - 2} {g4_y - 11.5}
+                 C {cx - 14} {g4_y - 13.0}, {cx - 15} {g4_y + 1.5}, {cx - 4} {g4_y + 6.5}
+                 C {cx + 7} {g4_y + 11.0}, {cx + 13} {g4_y - 2.0}, {cx + 4} {g4_y - 17.5}
+                 C {cx - 6} {g4_y - 31.0}, {cx + 8} {top_y + 2.0}, {cx + 2} {top_y}
+                 C {cx - 3} {top_y - 1.5}, {cx - 2} {top_y + 14.0}, {cx - 1} {bot_y - 8.0}
+                 C {cx - 1} {bot_y}, {cx - 8} {bot_y + 3.0}, {cx - 11} {bot_y - 2.5}
+                 C {cx - 13} {bot_y - 6.5}, {cx - 7} {bot_y - 8.5}, {cx - 5} {bot_y - 5.5}"
+              fill="none" stroke="#111827" stroke-width="2.35"
+              stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="{cx - 7.5}" cy="{bot_y - 4.0}" r="2.7" fill="#111827"/>
+    </g>
+    """
 
 
 def draw_key_triads_staff(key_labels):
@@ -324,7 +370,7 @@ def draw_key_triads_staff(key_labels):
     triads = _diatonic_triad_pitches(k_obj.tonic.name, is_major)
 
     width = 920
-    height = 175
+    height = 172
     top_y = 44.0
     gap = 11.0
     staff_left = 24
@@ -348,16 +394,7 @@ def draw_key_triads_staff(key_labels):
         f' y2="{bot_y}" stroke="#222" stroke-width="1.5"/>'
     )
 
-    clef_svg = f"""
-        <g transform="translate(46, {top_y - 10}) scale(0.82)">
-            <path d="M26 78 C38 78, 45 68, 43 57 C41 47, 27 45, 22 53 C17 60, 22 69, 30 69
-                     C35 69, 38 65, 37 61 C36 58, 32 58, 31 60
-                     M31 78 L31 14 C31 6, 23 4, 20 11 C17 18, 24 28, 36 37
-                     C45 44, 46 56, 39 67 C33 75, 22 77, 15 71 C9 66, 10 56, 17 51"
-                  fill="none" stroke="#111" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
-            <circle cx="15" cy="73" r="3.2" fill="#111"/>
-        </g>
-        """
+    clef_svg = _build_g_clef_svg(x_center=58.0, top_line_y=top_y, line_gap=gap)
 
     notes_svg = []
     start_x = 135
@@ -368,6 +405,7 @@ def draw_key_triads_staff(key_labels):
       for p_item in (p1, p3, p5):
         ny = _pitch_to_svg_y(p_item, top_line_y=top_y, line_gap=gap)
 
+        # 아래 덧줄 및 위 덧줄
         if ny >= bot_y + gap * 0.8:
           cur_ly = bot_y + gap
           while cur_ly <= ny + 1.5:
@@ -385,22 +423,25 @@ def draw_key_triads_staff(key_labels):
             )
             cur_ly -= gap
 
+        # 임시표(# / b)
         if "#" in p_item.name:
           notes_svg.append(
-              f'<text x="{cx - 16}" y="{ny + 4}" font-size="13" font-weight="bold"'
+              f'<text x="{cx - 15}" y="{ny + 4}" font-size="13" font-weight="bold"'
               f' fill="#111" text-anchor="end">♯</text>'
           )
         elif "-" in p_item.name:
           notes_svg.append(
-              f'<text x="{cx - 16}" y="{ny + 4}" font-size="13" font-weight="bold"'
+              f'<text x="{cx - 15}" y="{ny + 4}" font-size="13" font-weight="bold"'
               f' fill="#111" text-anchor="end">♭</text>'
           )
 
+        # 온음표(타원)
         notes_svg.append(
-            f'<ellipse cx="{cx}" cy="{ny}" rx="8.2" ry="5.3" fill="#fff"'
+            f'<ellipse cx="{cx}" cy="{ny}" rx="8.0" ry="5.1" fill="#fff"'
             ' stroke="#111" stroke-width="2.0"/>'
         )
 
+      # 도수 라벨
       notes_svg.append(
           f'<text x="{cx}" y="{bot_y + 28}" font-size="13" font-weight="bold"'
           ' fill="#111" text-anchor="middle"'
@@ -961,21 +1002,4 @@ if score is not None:
     st.audio(make_midi_audio(score), format="audio/midi")
     for p in st.session_state[phrase_state_key]:
       if p["시작"] <= p["끝"] and total_m > 0:
-        st.caption(f"{p['이름']} ({p['시작']}~{p['끝']}마디)")
-        st.audio(
-            make_midi_audio(score, p["시작"], p["끝"]), format="audio/midi"
-        )
-elif isinstance(picked_data, dict) and picked_data:
-  phrases_saved = st.session_state.get(phrase_state_key, [])
-  if phrases_saved:
-    st.subheader("프레이징 구분 근거")
-    for p in phrases_saved:
-      st.markdown(
-          f"""
-          <div class="phrase-box">
-              <strong>{p.get('이름', '프레이즈')}</strong> (m.{p.get('시작', '?')} ~ m.{p.get('끝', '?')})<br>
-              <span>근거: {p.get('근거', '')}</span>
-          </div>
-          """,
-          unsafe_allow_html=True,
-      )
+        st.caption(f"{p['이름']} ({
