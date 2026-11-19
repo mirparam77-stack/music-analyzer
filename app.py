@@ -239,10 +239,11 @@ def parse_key_safe(key_label):
 
 def get_scale_7_pitches(k_obj, is_major):
     try:
-        if is_major:
-            sc = key.Key(k_obj.tonic, "major").getScale("major")
-        else:
-            sc = key.Key(k_obj.tonic, "minor").getScale("harmonic")
+        sc = (
+            key.Key(k_obj.tonic, "major").getScale("major")
+            if is_major
+            else key.Key(k_obj.tonic, "minor").getScale("harmonic")
+        )
         pitches_list = list(sc.getPitches("C4", "B4"))
         if len(pitches_list) >= 7:
             return pitches_list[:7]
@@ -258,55 +259,37 @@ def _diatonic_triad_pitches(tonic_str, is_major):
     k_obj = parse_key_safe(f"{tonic_str} {'major' if is_major else 'minor'}")
     scale_p = get_scale_7_pitches(k_obj, is_major)
     triads = []
-    for idx in range(7):
-        p1 = pitch.Pitch(scale_p[idx].nameWithOctave)
-        p3 = pitch.Pitch(scale_p[(idx + 2) % 7].nameWithOctave)
-        p5 = pitch.Pitch(scale_p[(idx + 4) % 7].nameWithOctave)
 
-        while p3.midi <= p1.midi:
+    for idx in range(7):
+        base_p = pitch.Pitch(scale_p[idx].nameWithOctave)
+        if idx >= 4 and base_p.midi >= 71:
+            base_p.octave -= 1
+
+        p3_raw = pitch.Pitch(scale_p[(idx + 2) % 7].nameWithOctave)
+        p3 = pitch.Pitch(f"{p3_raw.name}{base_p.octave}")
+        if p3.midi <= base_p.midi:
             p3.octave += 1
-        while p5.midi <= p3.midi:
+
+        p5_raw = pitch.Pitch(scale_p[(idx + 4) % 7].nameWithOctave)
+        p5 = pitch.Pitch(f"{p5_raw.name}{p3.octave}")
+        if p5.midi <= p3.midi:
             p5.octave += 1
 
-        while p5.midi > 80 and p1.midi >= 65:
-            p1.octave -= 1
-            p3.octave -= 1
-            p5.octave -= 1
-
-        triads.append((p1, p3, p5))
+        triads.append((base_p, p3, p5))
     return triads
 
 
-def _pitch_to_svg_y(p_obj, top_line_y=48.0, line_gap=13.0):
-    staff_step_map = {
-        81: -2.0,
-        79: -1.0,
-        77: 0.0,
-        76: 0.5,
-        74: 1.0,
-        72: 1.5,
-        71: 2.0,
-        69: 2.5,
-        67: 3.0,
-        65: 3.5,
-        64: 4.0,
-        62: 4.5,
-        60: 5.0,
-        59: 5.5,
-        57: 6.0,
-    }
-    midi_val = p_obj.midi
-    if midi_val in staff_step_map:
-        step = staff_step_map[midi_val]
-    else:
-        closest_midi = min(staff_step_map.keys(), key=lambda m: abs(m - midi_val))
-        step = staff_step_map[closest_midi]
-    return top_line_y + step * line_gap
+def _pitch_to_svg_y(p_obj, top_line_y=52.0, line_gap=13.0):
+    letter_idx = {"C": 0, "D": 1, "E": 2, "F": 3, "G": 4, "A": 5, "B": 6}[p_obj.step]
+    diatonic_pos = p_obj.octave * 7 + letter_idx
+    f5_pos = 5 * 7 + 3
+    steps_from_f5 = f5_pos - diatonic_pos
+    return top_line_y + steps_from_f5 * (0.5 * line_gap)
 
 
-def _build_g_clef_svg(x_center=58.0, top_line_y=48.0, line_gap=13.0):
+def _build_g_clef_svg(x_center=56.0, top_line_y=52.0, line_gap=13.0):
     g4_y = top_line_y + 3 * line_gap
-    top_y = top_line_y - 13.0
+    top_y = top_line_y - 14.0
     bot_y = top_line_y + 4 * line_gap + 12.0
     cx = x_center
     return f"""
@@ -324,6 +307,44 @@ def _build_g_clef_svg(x_center=58.0, top_line_y=48.0, line_gap=13.0):
         <circle cx="{cx - 7.5}" cy="{bot_y - 4.5}" r="2.7" fill="#111827"/>
     </g>
     """
+
+
+SYMBOL_FONT = "'DejaVu Sans', 'Segoe UI Symbol', 'Apple SD Gothic Neo', sans-serif"
+
+
+def _build_key_signature_svg(k_obj, top_line_y=52.0, line_gap=13.0, start_x=88.0):
+    """조성 조표(# 또는 b)를 높은음자리표 옆에 표시하고 조표 음 이름 맵을 반환합니다."""
+    sharps = k_obj.sharps
+    sig_svg = []
+    key_acc_map = {}
+
+    sharp_order = [("F", 5), ("C", 5), ("G", 5), ("D", 5), ("A", 4), ("E", 5), ("B", 4)]
+    flat_order = [("B", 4), ("E", 5), ("A", 4), ("D", 5), ("G", 4), ("C", 5), ("F", 4)]
+
+    if sharps > 0:
+        for i in range(min(sharps, 7)):
+            st_let, oct_v = sharp_order[i]
+            key_acc_map[st_let] = "#"
+            p_tmp = pitch.Pitch(f"{st_let}#{oct_v}")
+            sy = _pitch_to_svg_y(p_tmp, top_line_y=top_line_y, line_gap=line_gap)
+            sx = start_x + i * 13.0
+            sig_svg.append(
+                f'<text x="{sx}" y="{sy + 5.0}" font-size="16" font-weight="bold" '
+                f'fill="#111827" text-anchor="middle" font-family="{SYMBOL_FONT}">♯</text>'
+            )
+    elif sharps < 0:
+        for i in range(min(abs(sharps), 7)):
+            st_let, oct_v = flat_order[i]
+            key_acc_map[st_let] = "-"
+            p_tmp = pitch.Pitch(f"{st_let}-{oct_v}")
+            sy = _pitch_to_svg_y(p_tmp, top_line_y=top_line_y, line_gap=line_gap)
+            sx = start_x + i * 13.0
+            sig_svg.append(
+                f'<text x="{sx}" y="{sy + 5.0}" font-size="16" font-weight="bold" '
+                f'fill="#111827" text-anchor="middle" font-family="{SYMBOL_FONT}">♭</text>'
+            )
+
+    return "".join(sig_svg), key_acc_map
 
 
 def draw_key_triads_staff(key_labels):
@@ -346,55 +367,70 @@ def draw_key_triads_staff(key_labels):
         deg_list = major_degs if is_major else minor_degs
         triads = _diatonic_triad_pitches(k_obj.tonic.name, is_major)
 
-        width = 920
-        height = 192
-        top_y = 48.0
+        width = 960
+        height = 196
+        top_y = 52.0
         gap = 13.0
         staff_left = 24
-        staff_right = 896
+        staff_right = 936
         bot_y = top_y + 4 * gap
+
+        clef_svg = _build_g_clef_svg(x_center=56.0, top_line_y=top_y, line_gap=gap)
+        sig_svg, key_acc_map = _build_key_signature_svg(
+            k_obj, top_line_y=top_y, line_gap=gap, start_x=88.0
+        )
 
         notes_svg = []
         ledger_svg = []
         labels_svg = []
-        start_x = 135
-        step_x = 102
+        start_x = 195
+        step_x = 104
 
         for idx_d, (p1, p3, p5) in enumerate(triads):
             cx = start_x + idx_d * step_x
             for p_item in (p1, p3, p5):
                 ny = _pitch_to_svg_y(p_item, top_line_y=top_y, line_gap=gap)
 
-                if ny >= bot_y + gap * 0.8:
+                if ny >= bot_y + gap * 0.45:
                     cur_ly = bot_y + gap
-                    while cur_ly <= ny + 1.5:
+                    while cur_ly <= ny + 1.0:
                         ledger_svg.append(
                             f'<line x1="{cx - 15}" y1="{cur_ly}" x2="{cx + 15}" y2="{cur_ly}" stroke="#222" stroke-width="1.3"/>'
                         )
                         cur_ly += gap
-                elif ny <= top_y - gap * 0.8:
+                elif ny <= top_y - gap * 0.45:
                     cur_ly = top_y - gap
-                    while cur_ly >= ny - 1.5:
+                    while cur_ly >= ny - 1.0:
                         ledger_svg.append(
                             f'<line x1="{cx - 15}" y1="{cur_ly}" x2="{cx + 15}" y2="{cur_ly}" stroke="#222" stroke-width="1.3"/>'
                         )
                         cur_ly -= gap
 
-                if "#" in p_item.name:
-                    labels_svg.append(
-                        f'<text x="{cx - 15}" y="{ny + 4}" font-size="13" font-weight="bold" fill="#111" text-anchor="end">♯</text>'
-                    )
-                elif "-" in p_item.name:
-                    labels_svg.append(
-                        f'<text x="{cx - 15}" y="{ny + 4}" font-size="13" font-weight="bold" fill="#111" text-anchor="end">♭</text>'
-                    )
+                cur_acc = "#" if "#" in p_item.name else ("-" if "-" in p_item.name else "")
+                sig_acc = key_acc_map.get(p_item.step, "")
+                if cur_acc != sig_acc:
+                    if cur_acc == "#":
+                        labels_svg.append(
+                            f'<text x="{cx - 14}" y="{ny + 4.5}" font-size="14" font-weight="bold" '
+                            f'fill="#111" text-anchor="end" font-family="{SYMBOL_FONT}">♯</text>'
+                        )
+                    elif cur_acc == "-":
+                        labels_svg.append(
+                            f'<text x="{cx - 14}" y="{ny + 4.5}" font-size="14" font-weight="bold" '
+                            f'fill="#111" text-anchor="end" font-family="{SYMBOL_FONT}">♭</text>'
+                        )
+                    elif sig_acc != "":
+                        labels_svg.append(
+                            f'<text x="{cx - 14}" y="{ny + 4.5}" font-size="14" font-weight="bold" '
+                            f'fill="#111" text-anchor="end" font-family="{SYMBOL_FONT}">♮</text>'
+                        )
 
                 notes_svg.append(
-                    f'<ellipse cx="{cx}" cy="{ny}" rx="8.0" ry="4.2" fill="none" stroke="#111" stroke-width="2.0"/>'
+                    f'<ellipse cx="{cx}" cy="{ny}" rx="8.0" ry="4.4" fill="none" stroke="#111" stroke-width="2.1"/>'
                 )
 
             labels_svg.append(
-                f'<text x="{cx}" y="{bot_y + 30}" font-size="13" font-weight="bold" fill="#111" text-anchor="middle" font-family="sans-serif">{deg_list[idx_d]}</text>'
+                f'<text x="{cx}" y="{bot_y + 30}" font-size="13" font-weight="bold" fill="#111" text-anchor="middle" font-family="{SYMBOL_FONT}">{deg_list[idx_d]}</text>'
             )
 
         staff_svg = []
@@ -411,18 +447,17 @@ def draw_key_triads_staff(key_labels):
             f'<line x1="{staff_right}" y1="{top_y}" x2="{staff_right}" y2="{bot_y}" stroke="#222" stroke-width="1.5"/>'
         )
 
-        clef_svg = _build_g_clef_svg(x_center=58.0, top_line_y=top_y, line_gap=gap)
-
         svg_block = f"""
         <div style="margin-bottom: 14px; background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px;">
             <div style="font-weight:700; font-size:14px; color:#111827; margin-bottom:4px;">
                 {tonic_name} {mode_kor} ({k_label})
             </div>
-            <svg viewBox="0 0 {width} {height}" width="100%" style="max-width:940px; height:auto; display:block;">
+            <svg viewBox="0 0 {width} {height}" width="100%" style="max-width:980px; height:auto; display:block;">
                 {''.join(notes_svg)}
                 {''.join(staff_svg)}
                 {''.join(ledger_svg)}
                 {clef_svg}
+                {sig_svg}
                 {''.join(labels_svg)}
             </svg>
         </div>
@@ -431,7 +466,7 @@ def draw_key_triads_staff(key_labels):
 
     components.html(
         f"""
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif;">
+        <div style="font-family: {SYMBOL_FONT};">
             {''.join(blocks_html)}
         </div>
         """,
