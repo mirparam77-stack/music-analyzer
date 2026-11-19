@@ -755,6 +755,33 @@ if uploaded_file is not None:
   finally:
     if os.path.exists(tmp_path):
       os.remove(tmp_path)
+elif isinstance(picked_data, dict) and picked_data:
+  source_title = (
+      picked_data.get("title")
+      or picked_data.get("곡명")
+      or picked_data.get("source_title")
+      or picked_song
+  )
+  total_m = picked_data.get("total_measures", 0)
+  m_info = {
+      "effective_measures": total_m,
+      "raw_measures": picked_data.get("raw_measures", total_m),
+      "error_msg": None,
+      "has_pickup": False,
+      "parts": picked_data.get("parts", []),
+  }
+  cmap = picked_data.get(
+      "cmap",
+      {
+          "bg": "#f4f6f9",
+          "border": "#4a6fa5",
+          "mood": picked_data.get("mood", "저장된 분석 데이터"),
+      },
+  )
+  phrase_state_key = f"v3_phrases_{source_title}"
+  if phrase_state_key not in st.session_state:
+    st.session_state[phrase_state_key] = picked_data.get("phrases", [])
+  modulations = picked_data.get("modulations", [])
 
 if score is not None:
   m_info = check_and_fix_measures(
